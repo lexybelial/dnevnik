@@ -525,9 +525,11 @@ function wrapCanvasText(ctx,text,maxW){
   });
   return out;
 }
-async function makeIntentImage(d){
+async function makeIntentImage(d,withHeader){
   try{await document.fonts.ready;}catch(e){}
   const it=state.intents[d]||{};
+  const ph=withHeader?(photoCache[d]||[]):[];
+  const headH=ph.length?300:0;
   const W=1000,cardX=44,cardPad=58;
   const c=document.createElement("canvas");
   const ctx=c.getContext("2d");
@@ -540,7 +542,7 @@ async function makeIntentImage(d){
   const rendered=blocks.map(b=>({b,lines:wrapCanvasText(ctx,b.v.trim(),b.type==="check"?innerW-64:innerW)}));
   let contentH=170;
   rendered.forEach(r=>{contentH+=r.lines.length*(r.b.type==="check"?54:56)+(r.b.type==="check"?24:18);});
-  const cardH=Math.max(contentH+cardPad*2,420);
+  const cardH=Math.max(contentH+cardPad*2,420)+headH;
   const H=cardX*2+cardH+64;
   c.width=W;c.height=H;
   const g=ctx.createLinearGradient(0,0,0,H);
@@ -550,12 +552,25 @@ async function makeIntentImage(d){
   ctx.shadowColor="rgba(100,80,55,.20)";ctx.shadowBlur=34;ctx.shadowOffsetY=10;
   ctx.fillStyle="#FBF8F1";rr(ctx,cardX,cardX,W-cardX*2,cardH,46);ctx.fill();
   ctx.restore();
+  if(ph.length){
+    ctx.save();rr(ctx,cardX,cardX,W-cardX*2,cardH,46);ctx.clip();
+    const iw=(W-cardX*2)/ph.length;
+    for(let i=0;i<ph.length;i++){
+      try{
+        const im=await loadImgEl(ph[i].img);
+        const k=Math.max(iw/im.width,headH/im.height);
+        const dw=im.width*k,dh=im.height*k;
+        ctx.drawImage(im,cardX+i*iw+(iw-dw)/2,cardX+(headH-dh)/2,dw,dh);
+      }catch(e){}
+    }
+    ctx.restore();
+  }
   const x=cardX+cardPad;
-  let y=cardX+cardPad;
+  let y=cardX+headH+cardPad;
   ctx.font="500 "+F(28);
-  const tagT="#намерение",tw=ctx.measureText(tagT).width,pw=tw+56,ph=52,px=W-cardX-cardPad-pw;
-  ctx.fillStyle="#7E3F42";rr(ctx,px,y-8,pw,ph,26);ctx.fill();
-  ctx.fillStyle="#FDF7F2";ctx.textBaseline="middle";ctx.fillText(tagT,px+28,y-8+ph/2+2);
+  const tagT="#намерение",tw=ctx.measureText(tagT).width,pw=tw+56,pillH=52,px=W-cardX-cardPad-pw;
+  ctx.fillStyle="#7E3F42";rr(ctx,px,y-8,pw,pillH,26);ctx.fill();
+  ctx.fillStyle="#FDF7F2";ctx.textBaseline="middle";ctx.fillText(tagT,px+28,y-8+pillH/2+2);
   ctx.textBaseline="alphabetic";
   ctx.fillStyle="#55483E";ctx.font="500 "+F(48);ctx.fillText(fmtLong(d),x,y+38);
   ctx.fillStyle="#96897B";ctx.font="400 "+F(30);ctx.fillText(dowName(d),x,y+86);
@@ -579,18 +594,18 @@ async function makeIntentImage(d){
   ctx.fillText("Дневник зрелости",W/2,H-30);ctx.textAlign="left";
   return new Promise(res=>c.toBlob(b=>res(b),"image/png"));
 }
-async function shareIntentImage(d){
+async function shareIntentImage(d,withHeader){
   toast("Готовлю картинку…");
-  const blob=await makeIntentImage(d);
+  const blob=await makeIntentImage(d,withHeader);
   if(!blob){toast("Не получилось создать картинку");return;}
   const files=[new File([blob],"namerenie.png",{type:"image/png"})];
-  (photoCache[d]||[]).forEach((p,i)=>{try{files.push(new File([dataUrlToBlob(p.img)],"foto-"+(i+1)+".jpg",{type:"image/jpeg"}));}catch(e){}});
+  if(!withHeader)(photoCache[d]||[]).forEach((p,i)=>{try{files.push(new File([dataUrlToBlob(p.img)],"foto-"+(i+1)+".jpg",{type:"image/jpeg"}));}catch(e){}});
   try{
     if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files});return;}
     throw new Error("no-share");
   }catch(e){
     if(e&&e.name==="AbortError")return;
-    openLightbox([URL.createObjectURL(blob)].concat((photoCache[d]||[]).map(p=>p.img)));
+    openLightbox([URL.createObjectURL(blob)].concat(withHeader?[]:(photoCache[d]||[]).map(p=>p.img)));
     toast("Сохрани картинки долгим нажатием и отправь в чат");
   }
 }
@@ -859,7 +874,7 @@ function viewIntent(v){
   $("#shareIntent").addEventListener("click",()=>{
     const ph=photoCache[d]||[];
     if(!intentHas(d)&&!ph.length){toast("Намерение пока пустое");return;}
-    openShare(intentShareText(d),ph,()=>shareIntentImage(d));
+    openShare(intentShareText(d),ph,()=>shareIntentImage(d,false),ph.length?()=>shareIntentImage(d,true):null);
   });
   if(editing){
     renderIntentBody(it,d);
@@ -1241,7 +1256,7 @@ async function copyText(t,quiet){
   toast(ok?"Скопировано":"Не получилось скопировать — выдели текст вручную");
   return ok;
 }
-function openShare(text,photos,makeImg){
+function openShare(text,photos,makeImg,makeImgHead){
   const hasPh=photos&&photos.length;
   openSheet(`<div class="sheet-head"><h2>Поделиться</h2><button class="btn small" data-close>Закрыть</button></div>
   <div class="sheet-body">
@@ -1249,12 +1264,14 @@ function openShare(text,photos,makeImg){
     <div class="share-pre">${esc(text)}</div>
     ${hasPh?`<button class="btn primary" id="shAlbum">${ICONS.share} Отправить альбомом с текстом</button>`:""}
     ${makeImg?`<button class="btn ${hasPh?"":"primary"}" id="shImg">Отправить картинкой</button>`:""}
+    ${makeImgHead?`<button class="btn" id="shImgHead">Картинкой с фото-шапкой</button>`:""}
     <button class="btn" id="shCopy">${ICONS.copy} Скопировать текст</button>
     <button class="btn" id="shTg">Скопировать и открыть Telegram</button>
     <p class="sub" style="margin:0">${hasPh?"«Отправить альбомом» откроет системное меню — выбери Telegram и чат: фото уйдут альбомом, текст — подписью к нему. ":""}Кнопка Telegram открывает чат с текстом — если он не подставился, вставь из буфера.</p>
   </div>`);
   if(hasPh)$("#shAlbum").addEventListener("click",()=>shareAlbum(text,photos));
   if(makeImg)$("#shImg").addEventListener("click",makeImg);
+  if(makeImgHead)$("#shImgHead").addEventListener("click",makeImgHead);
   $("#shCopy").addEventListener("click",()=>copyText(text));
   $("#shTg").addEventListener("click",async()=>{await copyText(text);window.open("https://t.me/share/url?url=%20&text="+encodeURIComponent(text),"_blank");});
 }
