@@ -524,12 +524,12 @@ async function makeIntentImage(d){
   const F=n=>n+'px Jost, "Century Gothic", sans-serif';
   const innerW=W-cardX*2-cardPad*2;
   ctx.font="400 "+F(38);
-  const textLines=(it.text&&it.text.trim())?wrapCanvasText(ctx,it.text.trim(),innerW):[];
-  const items=(it.blocks||[]).filter(b=>b.v&&b.v.trim());
-  const itemLines=items.map(b=>({b,lines:wrapCanvasText(ctx,b.v.trim(),innerW-64)}));
+  const blocks=[];
+  if(it.text&&it.text.trim())blocks.push({type:"text",v:it.text.trim()});
+  (it.blocks||[]).forEach(b=>{if(b.v&&b.v.trim())blocks.push(b);});
+  const rendered=blocks.map(b=>({b,lines:wrapCanvasText(ctx,b.v.trim(),b.type==="check"?innerW-64:innerW)}));
   let contentH=170;
-  if(textLines.length)contentH+=textLines.length*56+16;
-  itemLines.forEach(x=>{contentH+=x.lines.length*54+24;});
+  rendered.forEach(r=>{contentH+=r.lines.length*(r.b.type==="check"?54:56)+(r.b.type==="check"?24:18);});
   const cardH=Math.max(contentH+cardPad*2,420);
   const H=cardX*2+cardH+64;
   c.width=W;c.height=H;
@@ -550,10 +550,13 @@ async function makeIntentImage(d){
   ctx.fillStyle="#55483E";ctx.font="500 "+F(48);ctx.fillText(fmtLong(d),x,y+38);
   ctx.fillStyle="#96897B";ctx.font="400 "+F(30);ctx.fillText(dowName(d),x,y+86);
   y+=160;
-  ctx.fillStyle="#55483E";ctx.font="400 "+F(38);
-  textLines.forEach(l=>{ctx.fillText(l,x,y);y+=56;});
-  if(textLines.length)y+=16;
-  itemLines.forEach(({b,lines})=>{
+  rendered.forEach(({b,lines})=>{
+    if(b.type!=="check"){
+      ctx.fillStyle="#55483E";ctx.font="400 "+F(38);
+      lines.forEach(l=>{ctx.fillText(l,x,y);y+=56;});
+      y+=18;
+      return;
+    }
     const cy=y-13;
     ctx.beginPath();ctx.arc(x+18,cy,17,0,7);
     if(b.done){ctx.fillStyle="#7E3F42";ctx.fill();ctx.strokeStyle="#FDF7F2";ctx.lineWidth=4.5;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(x+9.5,cy+1);ctx.lineTo(x+15.5,cy+8);ctx.lineTo(x+27,cy-7);ctx.stroke();}
@@ -570,14 +573,15 @@ async function shareIntentImage(d){
   toast("Готовлю картинку…");
   const blob=await makeIntentImage(d);
   if(!blob){toast("Не получилось создать картинку");return;}
-  const file=new File([blob],"namerenie.png",{type:"image/png"});
+  const files=[new File([blob],"namerenie.png",{type:"image/png"})];
+  (photoCache[d]||[]).forEach((p,i)=>{try{files.push(new File([dataUrlToBlob(p.img)],"foto-"+(i+1)+".jpg",{type:"image/jpeg"}));}catch(e){}});
   try{
-    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return;}
+    if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files});return;}
     throw new Error("no-share");
   }catch(e){
     if(e&&e.name==="AbortError")return;
-    openLightbox(URL.createObjectURL(blob));
-    toast("Сохрани картинку долгим нажатием и отправь в чат");
+    openLightbox([URL.createObjectURL(blob)].concat((photoCache[d]||[]).map(p=>p.img)));
+    toast("Сохрани картинки долгим нажатием и отправь в чат");
   }
 }
 
