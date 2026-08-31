@@ -113,6 +113,8 @@ main{flex:1;background:var(--panel);border-radius:36px 36px 0 0;padding:24px 20p
 .checkrow{display:flex;align-items:flex-start;gap:9px;margin-bottom:8px}
 .checkrow input[type=text]{flex:1;border:0;border-bottom:1px solid var(--line);background:transparent;padding:5px 2px;box-shadow:none;border-radius:0}
 .checkrow input[type=text]:focus{border-bottom-color:var(--accent);outline:none}
+.checkrow .linefield{flex:1;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;box-shadow:none;padding:6px 2px;min-height:34px}
+.checkrow .linefield:focus{border-bottom-color:var(--accent);outline:none}
 .circle{width:23px;height:23px;min-width:23px;border-radius:50%;border:1.5px solid var(--faint);margin-top:5px;display:inline-flex;align-items:center;justify-content:center;color:transparent;background:var(--field)}
 .circle.on{background:var(--accent);border-color:var(--accent);color:var(--onacc)}
 .circle svg{width:13px;height:13px}
@@ -767,7 +769,7 @@ function renderIntentBody(it,d){
 /* Универсальный редактор блоков (поле/чек-лист) */
 function blocksHtml(blocks,pref){
   const rows=blocks.map((b,i)=>b.type==="check"
-    ?`<div class="checkrow"><button class="circle ${b.done?"on":""}" data-tg="${i}" aria-label="Отметить">${ICONS.check}</button><input type="text" data-in="${i}" value="${esc(b.v)}" placeholder="Пункт чек-листа"><button class="xbtn" data-x="${i}" aria-label="Удалить">✕</button></div>`
+    ?`<div class="checkrow"><button class="circle ${b.done?"on":""}" data-tg="${i}" aria-label="Отметить">${ICONS.check}</button><textarea data-auto data-in="${i}" class="linefield" rows="1" placeholder="Пункт чек-листа">${esc(b.v)}</textarea><button class="xbtn" data-x="${i}" aria-label="Удалить">✕</button></div>`
     :`<div class="checkrow"><textarea data-auto data-in="${i}" placeholder="Поле для заполнения…" style="flex:1">${esc(b.v)}</textarea><button class="xbtn" data-x="${i}" aria-label="Удалить">✕</button></div>`
   ).join("");
   return `<div id="${pref}rows">${rows||'<p class="sub" style="margin:0 0 8px">Добавь поле для текста или пункты чек-листа.</p>'}</div>
