@@ -193,6 +193,16 @@ svg{max-width:100%}
 input[type=text],input[type=number]{border:1px solid transparent;border-radius:16px;background:var(--field);padding:10px 15px;box-shadow:var(--shadow-sm)}
 input[type=text]:focus,input[type=number]:focus{border-color:var(--accent-line)}
 select{border:1px solid transparent;border-radius:16px;background-color:var(--field);padding:11px 15px;width:100%;-webkit-appearance:none;appearance:none;box-shadow:var(--shadow-sm);background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 21px) 50%,calc(100% - 15px) 50%;background-size:6px 6px;background-repeat:no-repeat}
+.int-photos{display:flex;gap:2px;max-height:118px;overflow:hidden}
+.int-photos:empty{display:none}
+.int-photos img{flex:1;min-width:0;height:118px;object-fit:cover;cursor:zoom-in}
+.int-photos.tall{max-height:230px}
+.int-photos.tall img{height:230px}
+.int-viewtext{white-space:pre-wrap;font-size:15px;margin:10px 0 2px}
+.vcheck{display:flex;gap:10px;align-items:flex-start;margin-top:10px}
+.vcheck span{padding-top:4px;font-size:15px}
+.vcheck span.done{color:var(--muted)}
+.vcheck .circle{margin-top:2px}
 .cal-day.pick{cursor:pointer}
 .cal-day.pick:hover{background:var(--accent-soft)}
 .cal-day.sel{background:var(--accent);color:var(--onacc);font-weight:500}
@@ -708,7 +718,7 @@ function obsEmpty(o){const f=o.f||{};return !o.sphere&&!Object.values(f).some(v=
 function render(){renderTop();renderTabbar();renderView();}
 
 function renderTop(){
-  const titles={intent:"Намерения",obs:"Самонаблюдения",neuro:"Практики",settings:"Настройки"};
+  const titles={intent:"Намерение",obs:"Самонаблюдения",neuro:"Практики",settings:"Настройки"};
   $("#topTitle").textContent=titles[tab];
   const t=todayIso();
   $("#topDate").textContent=`${fmtLong(t)}, ${dowName(t)}`;
@@ -721,7 +731,7 @@ function renderTop(){
 }
 
 function renderTabbar(){
-  const tabs=[["intent","Намерения",ICONS.sun],["obs","Наблюдения",ICONS.eye],["neuro","Практики",ICONS.spark],["settings","Настройки",ICONS.gear]];
+  const tabs=[["intent","Намерение",ICONS.sun],["obs","Наблюдения",ICONS.eye],["neuro","Практики",ICONS.spark],["settings","Настройки",ICONS.gear]];
   $("#tabbar").innerHTML=tabs.map(([k,l,ic])=>`<button data-t="${k}" class="${tab===k?"on":""}">${ic}<span>${l}</span></button>`).join("");
   $("#tabbar").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>go(b.dataset.t)));
 }
@@ -759,25 +769,16 @@ function viewIntentList(v){
   $("#intBack").addEventListener("click",()=>{intentListMode=false;intentDate=t;render();});
   v.querySelectorAll("[data-d]").forEach(b=>b.addEventListener("click",()=>{intentDate=b.dataset.d;intentListMode=false;render();}));
 }
+let intentEdit=false;
 function viewIntent(v){
   if(intentListMode){viewIntentList(v);return;}
-  const d=intentDate,it=getIntent(d),t=todayIso();
+  const d=intentDate,t=todayIso();
+  if(viewIntent._last!==d){intentEdit=false;viewIntent._last=d;}
+  const it=getIntent(d);
   const c=intentCounts();
-  v.innerHTML=`
-  ${d!==t?`<button class="backlink" id="toToday">${ICONS.back} Вернуться к сегодняшнему дню</button>`:""}
-  <div class="card">
-    <div class="spread" style="margin-bottom:10px">
-      <div><div style="font-weight:800;font-size:18px;letter-spacing:-.01em">${fmtLong(d)}</div><div class="sub">${dowName(d)}</div></div>
-      <span class="tag">#намерение</span>
-    </div>
-    <div class="spread" style="margin-bottom:12px">
-      <span class="sub">Перенести на дату:</span>
-      <button class="date-in" id="intMove" aria-label="Перенести намерение">${fmtShort(d)} ▾</button>
-    </div>
-    <div id="intentBody"></div>
-    <div class="photo-grid" id="phGrid"></div>
-    <input type="file" id="phInput" accept="image/*" multiple hidden>
-  </div>
+  const editing=intentEdit||!intentHas(d);
+  const head=d!==t?`<button class="backlink" id="toToday">${ICONS.back} Вернуться к сегодняшнему дню</button>`:"";
+  const foot=`
   <div class="row spread">
     <button class="btn primary" id="shareIntent">${ICONS.share} Поделиться</button>
     <button class="textlink" id="intListBtn">Все намерения <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
@@ -787,6 +788,45 @@ function viewIntent(v){
     <button class="btn small danger" id="delIntent">Удалить</button>
   </div>
   <p class="sub" style="text-align:center;margin:2px 0 0">Неделя: <b>${c.week}</b> · Месяц: <b>${c.month}</b> · Год: <b>${c.year}</b> · Всего: <b>${c.total}</b></p>`;
+  if(editing){
+    v.innerHTML=head+`
+    <div class="card">
+      <div class="spread" style="margin-bottom:10px">
+        <div><div style="font-weight:800;font-size:18px;letter-spacing:-.01em">${fmtLong(d)}</div><div class="sub">${dowName(d)}</div></div>
+        <span class="tag">#намерение</span>
+      </div>
+      <div class="spread" style="margin-bottom:12px">
+        <span class="sub">Перенести на дату:</span>
+        <button class="date-in" id="intMove">${fmtShort(d)} ▾</button>
+      </div>
+      <div id="intentBody"></div>
+      <div class="photo-grid" id="phGrid"></div>
+      <input type="file" id="phInput" accept="image/*" multiple hidden>
+      <button class="btn primary small" id="intDoneBtn" style="margin-top:14px">✓ Готово</button>
+    </div>`+foot;
+  }else{
+    const checks=(it.blocks||[]).map((b,i)=>{
+      if(!(b.v&&b.v.trim()))return"";
+      return b.type==="check"
+        ?`<div class="vcheck"><button class="circle ${b.done?"on":""}" data-vtg="${i}" aria-label="Отметить">${ICONS.check}</button><span class="${b.done?"done":""}">${esc(b.v.trim())}</span></div>`
+        :`<div class="int-viewtext">${esc(b.v.trim())}</div>`;
+    }).join("");
+    v.innerHTML=head+`
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="int-photos" id="intPhStrip"></div>
+      <div style="padding:20px">
+        <div class="spread" style="margin-bottom:4px">
+          <div><div style="font-weight:800;font-size:18px;letter-spacing:-.01em">${fmtLong(d)}</div><div class="sub">${dowName(d)}</div></div>
+          <span class="tag">#намерение</span>
+        </div>
+        ${it.text&&it.text.trim()?`<div class="int-viewtext">${esc(it.text.trim())}</div>`:""}
+        ${checks}
+        <div style="margin-top:18px">
+          <button class="hintlink" id="intEditBtn">Редактировать</button>
+        </div>
+      </div>
+    </div>`+foot;
+  }
   if(d!==t)$("#toToday").addEventListener("click",()=>{intentDate=t;render();});
   $("#intListBtn").addEventListener("click",()=>{intentListMode=true;render();});
   $("#delIntent").addEventListener("click",async()=>{
@@ -801,7 +841,8 @@ function viewIntent(v){
     }
     render();toast("Намерение удалено");
   });
-  $("#intMove").addEventListener("click",()=>openDatePicker(d,"Перенести намерение",async nd=>{
+  const mvBtn=$("#intMove");
+  if(mvBtn)mvBtn.addEventListener("click",()=>openDatePicker(d,"Перенести намерение",async nd=>{
     if(!nd||nd===d)return;
     if(!intentHas(d)){intentDate=nd;render();return;}
     if(intentHas(nd)){toast(`На ${fmtLong(nd)} уже есть намерение`);return;}
@@ -820,25 +861,46 @@ function viewIntent(v){
     if(!intentHas(d)&&!ph.length){toast("Намерение пока пустое");return;}
     openShare(intentShareText(d),ph,()=>shareIntentImage(d));
   });
-  renderIntentBody(it,d);
-  const drawPhotos=()=>{
-    const ph=photoCache[d]||[];
-    const grid=$("#phGrid");if(!grid)return;
-    grid.innerHTML=ph.map(p=>`<div class="photo-thumb"><img src="${p.img}" alt="Фото к намерению" data-pv="${p.id}"><button data-pd="${p.id}" aria-label="Удалить фото">✕</button></div>`).join("")+
-      `<button class="addphoto" id="phAdd">${ICONS.plus}<span>Фото</span></button>`;
-    $("#phAdd").addEventListener("click",()=>$("#phInput").click());
-    grid.querySelectorAll("[data-pd]").forEach(b=>b.addEventListener("click",()=>{delPhoto(d,b.dataset.pd);drawPhotos();}));
-    grid.querySelectorAll("[data-pv]").forEach(im=>im.addEventListener("click",()=>{const p=ph.find(x=>x.id===im.dataset.pv);if(p)openLightbox(p.img);}));
-  };
-  $("#phInput").addEventListener("change",async e=>{
-    const files=[...e.target.files];e.target.value="";
-    if(!files.length)return;
-    const addBtn=$("#phAdd");
-    if(addBtn)addBtn.innerHTML='<div class="spinner" style="width:18px;height:18px;border-width:2px"></div>';
-    for(const f of files){try{await addPhoto(d,await compressImage(f));}catch(err){toast("Не удалось добавить фото");}}
-    drawPhotos();toast("Фото добавлены");
-  });
-  loadPhotos(d).then(drawPhotos);
+  if(editing){
+    renderIntentBody(it,d);
+    $("#intDoneBtn").addEventListener("click",()=>{intentEdit=false;render();});
+    const drawPhotos=()=>{
+      const ph=photoCache[d]||[];
+      const grid=$("#phGrid");if(!grid)return;
+      grid.innerHTML=ph.map(p=>`<div class="photo-thumb"><img src="${p.img}" alt="Фото к намерению" data-pv="${p.id}"><button data-pd="${p.id}" aria-label="Удалить фото">✕</button></div>`).join("")+
+        `<button class="addphoto" id="phAdd">${ICONS.plus}<span>Фото</span></button>`;
+      $("#phAdd").addEventListener("click",()=>$("#phInput").click());
+      grid.querySelectorAll("[data-pd]").forEach(b=>b.addEventListener("click",()=>{delPhoto(d,b.dataset.pd);drawPhotos();}));
+      grid.querySelectorAll("[data-pv]").forEach(im=>im.addEventListener("click",()=>{const p=ph.find(x=>x.id===im.dataset.pv);if(p)openLightbox(p.img);}));
+    };
+    $("#phInput").addEventListener("change",async e=>{
+      const files=[...e.target.files];e.target.value="";
+      if(!files.length)return;
+      const addBtn=$("#phAdd");
+      if(addBtn)addBtn.innerHTML='<div class="spinner" style="width:18px;height:18px;border-width:2px"></div>';
+      for(const f of files){try{await addPhoto(d,await compressImage(f));}catch(err){toast("Не удалось добавить фото");}}
+      drawPhotos();toast("Фото добавлены");
+    });
+    loadPhotos(d).then(drawPhotos);
+  }else{
+    $("#intEditBtn").addEventListener("click",()=>{intentEdit=true;render();});
+    v.querySelectorAll("[data-vtg]").forEach(btn=>btn.addEventListener("click",()=>{
+      const b=it.blocks[+btn.dataset.vtg];b.done=!b.done;markSave(d);
+      btn.classList.toggle("on",b.done);
+      const sp=btn.nextElementSibling;if(sp)sp.classList.toggle("done",b.done);
+    }));
+    loadPhotos(d).then(ph=>{
+      const s=$("#intPhStrip");if(!s)return;
+      s.innerHTML=ph.map(p=>`<img src="${p.img}" alt="Фото" data-pv="${p.id}">`).join("");
+      s.querySelectorAll("[data-pv]").forEach(im=>im.addEventListener("click",()=>{const p=ph.find(x=>x.id===im.dataset.pv);if(p)openLightbox(p.img);}));
+      if(ph.length){
+        requestAnimationFrame(()=>{
+          const card=s.closest(".card");
+          if(card&&card.offsetHeight<window.innerHeight*0.5)s.classList.add("tall");
+        });
+      }
+    });
+  }
 }
 function markSave(d){deb("int"+d,()=>persistIntent(d));const m=$("#saveMark");if(m){m.textContent="Сохранено";clearTimeout(m._t);m._t=setTimeout(()=>m.textContent="",1600);}}
 
