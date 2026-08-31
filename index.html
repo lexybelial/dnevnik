@@ -554,6 +554,7 @@ async function makeIntentImage(d,withHeader){
   ctx.restore();
   if(ph.length){
     ctx.save();rr(ctx,cardX,cardX,W-cardX*2,cardH,46);ctx.clip();
+    ctx.beginPath();ctx.rect(cardX,cardX,W-cardX*2,headH);ctx.clip();
     const iw=(W-cardX*2)/ph.length;
     for(let i=0;i<ph.length;i++){
       try{
