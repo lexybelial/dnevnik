@@ -499,6 +499,88 @@ async function compressImage(file){
   return c.toDataURL("image/jpeg",0.4);
 }
 function dataUrlToBlob(u){const b64=u.split(",")[1];const bin=atob(b64);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:"image/jpeg"});}
+
+function rr(ctx,x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else{ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}}
+function wrapCanvasText(ctx,text,maxW){
+  const out=[];
+  String(text).split("\n").forEach(par=>{
+    if(!par.trim()){out.push("");return;}
+    let line="";
+    par.split(" ").forEach(w=>{
+      const t=line?line+" "+w:w;
+      if(ctx.measureText(t).width>maxW&&line){out.push(line);line=w;}
+      else line=t;
+    });
+    out.push(line);
+  });
+  return out;
+}
+async function makeIntentImage(d){
+  try{await document.fonts.ready;}catch(e){}
+  const it=state.intents[d]||{};
+  const W=1000,cardX=44,cardPad=58;
+  const c=document.createElement("canvas");
+  const ctx=c.getContext("2d");
+  const F=n=>n+'px Jost, "Century Gothic", sans-serif';
+  const innerW=W-cardX*2-cardPad*2;
+  ctx.font="400 "+F(38);
+  const textLines=(it.text&&it.text.trim())?wrapCanvasText(ctx,it.text.trim(),innerW):[];
+  const items=(it.blocks||[]).filter(b=>b.v&&b.v.trim());
+  const itemLines=items.map(b=>({b,lines:wrapCanvasText(ctx,b.v.trim(),innerW-64)}));
+  let contentH=170;
+  if(textLines.length)contentH+=textLines.length*56+16;
+  itemLines.forEach(x=>{contentH+=x.lines.length*54+24;});
+  const cardH=Math.max(contentH+cardPad*2,420);
+  const H=cardX*2+cardH+64;
+  c.width=W;c.height=H;
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#E0C6A0");g.addColorStop(.4,"#ECE0C9");g.addColorStop(1,"#E9E0D1");
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.save();
+  ctx.shadowColor="rgba(100,80,55,.20)";ctx.shadowBlur=34;ctx.shadowOffsetY=10;
+  ctx.fillStyle="#FBF8F1";rr(ctx,cardX,cardX,W-cardX*2,cardH,46);ctx.fill();
+  ctx.restore();
+  const x=cardX+cardPad;
+  let y=cardX+cardPad;
+  ctx.font="500 "+F(28);
+  const tagT="#намерение",tw=ctx.measureText(tagT).width,pw=tw+56,ph=52,px=W-cardX-cardPad-pw;
+  ctx.fillStyle="#7E3F42";rr(ctx,px,y-8,pw,ph,26);ctx.fill();
+  ctx.fillStyle="#FDF7F2";ctx.textBaseline="middle";ctx.fillText(tagT,px+28,y-8+ph/2+2);
+  ctx.textBaseline="alphabetic";
+  ctx.fillStyle="#55483E";ctx.font="500 "+F(48);ctx.fillText(fmtLong(d),x,y+38);
+  ctx.fillStyle="#96897B";ctx.font="400 "+F(30);ctx.fillText(dowName(d),x,y+86);
+  y+=160;
+  ctx.fillStyle="#55483E";ctx.font="400 "+F(38);
+  textLines.forEach(l=>{ctx.fillText(l,x,y);y+=56;});
+  if(textLines.length)y+=16;
+  itemLines.forEach(({b,lines})=>{
+    const cy=y-13;
+    ctx.beginPath();ctx.arc(x+18,cy,17,0,7);
+    if(b.done){ctx.fillStyle="#7E3F42";ctx.fill();ctx.strokeStyle="#FDF7F2";ctx.lineWidth=4.5;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(x+9.5,cy+1);ctx.lineTo(x+15.5,cy+8);ctx.lineTo(x+27,cy-7);ctx.stroke();}
+    else{ctx.strokeStyle="#BCB0A0";ctx.lineWidth=3;ctx.stroke();}
+    ctx.fillStyle="#55483E";ctx.font="400 "+F(38);
+    lines.forEach((l,i)=>{ctx.fillText(l,x+56,y+i*54);});
+    y+=lines.length*54+24;
+  });
+  ctx.fillStyle="#B4A995";ctx.font="400 "+F(26);ctx.textAlign="center";
+  ctx.fillText("Дневник зрелости",W/2,H-30);ctx.textAlign="left";
+  return new Promise(res=>c.toBlob(b=>res(b),"image/png"));
+}
+async function shareIntentImage(d){
+  toast("Готовлю картинку…");
+  const blob=await makeIntentImage(d);
+  if(!blob){toast("Не получилось создать картинку");return;}
+  const file=new File([blob],"namerenie.png",{type:"image/png"});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return;}
+    throw new Error("no-share");
+  }catch(e){
+    if(e&&e.name==="AbortError")return;
+    openLightbox(URL.createObjectURL(blob));
+    toast("Сохрани картинку долгим нажатием и отправь в чат");
+  }
+}
+
 async function shareAlbum(text,photos){
   try{
     const files=photos.map((p,i)=>new File([dataUrlToBlob(p.img)],`namerenie-${i+1}.jpg`,{type:"image/jpeg"}));
@@ -732,7 +814,7 @@ function viewIntent(v){
   $("#shareIntent").addEventListener("click",()=>{
     const ph=photoCache[d]||[];
     if(!intentHas(d)&&!ph.length){toast("Намерение пока пустое");return;}
-    openShare(intentShareText(d),ph);
+    openShare(intentShareText(d),ph,()=>shareIntentImage(d));
   });
   renderIntentBody(it,d);
   const drawPhotos=()=>{
@@ -1093,18 +1175,20 @@ async function copyText(t,quiet){
   toast(ok?"Скопировано":"Не получилось скопировать — выдели текст вручную");
   return ok;
 }
-function openShare(text,photos){
+function openShare(text,photos,makeImg){
   const hasPh=photos&&photos.length;
   openSheet(`<div class="sheet-head"><h2>Поделиться</h2><button class="btn small" data-close>Закрыть</button></div>
   <div class="sheet-body">
     ${hasPh?`<div class="share-thumbs">${photos.map(p=>`<img src="${p.img}" alt="Фото">`).join("")}</div>`:""}
     <div class="share-pre">${esc(text)}</div>
     ${hasPh?`<button class="btn primary" id="shAlbum">${ICONS.share} Отправить альбомом с текстом</button>`:""}
-    <button class="btn ${hasPh?"":"primary"}" id="shCopy">${ICONS.copy} Скопировать текст</button>
+    ${makeImg?`<button class="btn ${hasPh?"":"primary"}" id="shImg">Отправить картинкой</button>`:""}
+    <button class="btn" id="shCopy">${ICONS.copy} Скопировать текст</button>
     <button class="btn" id="shTg">Скопировать и открыть Telegram</button>
     <p class="sub" style="margin:0">${hasPh?"«Отправить альбомом» откроет системное меню — выбери Telegram и чат: фото уйдут альбомом, текст — подписью к нему. ":""}Кнопка Telegram открывает чат с текстом — если он не подставился, вставь из буфера.</p>
   </div>`);
   if(hasPh)$("#shAlbum").addEventListener("click",()=>shareAlbum(text,photos));
+  if(makeImg)$("#shImg").addEventListener("click",makeImg);
   $("#shCopy").addEventListener("click",()=>copyText(text));
   $("#shTg").addEventListener("click",async()=>{await copyText(text);window.open("https://t.me/share/url?url=%20&text="+encodeURIComponent(text),"_blank");});
 }
