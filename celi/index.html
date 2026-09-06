@@ -97,7 +97,8 @@
   .topRow{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px 8px; }
   .h1{ font-size:30px; font-weight:700; margin:0; }
   .iconBtn{ background:transparent; border:none; cursor:pointer; padding:4px; display:flex; }
-  .tabsRow{ display:flex; gap:10px; padding:8px 20px 6px; overflow-x:auto; }
+  .tabsRow{ display:flex; gap:10px; padding:8px 20px 6px; overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none; }
+  .tabsRow::-webkit-scrollbar{ display:none; }
   .chip{ padding:9px 18px; border-radius:22px; border:1px solid var(--line); background:transparent; color:var(--sub); font-size:14px; white-space:nowrap; cursor:pointer; }
   .chip.on{ background:var(--card2); color:var(--text); border-color:var(--card2); }
   .goalCard{ display:flex; gap:14px; align-items:flex-start; width:100%; padding:13px 18px; background:transparent; border:none; border-bottom:1px solid var(--line); cursor:pointer; text-align:left; }
@@ -160,8 +161,30 @@
   .spin{ width:30px; height:30px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--accent); animation:spin .8s linear infinite; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
   .busyBox{ background:var(--card); border-radius:16px; padding:24px 30px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .nextChip{ display:inline-flex; align-items:center; gap:5px; font-size:12.5px; padding:5px 11px; border-radius:13px; border:1px dashed var(--line); background:transparent; color:var(--sub); cursor:pointer; }
+  .nextChip.on{ border:1px solid var(--accent); background:var(--accent); color:var(--onAccent); font-weight:700; }
   .stageCmt{ font-size:13.5px; color:var(--sub); padding:2px 0 4px 22px; white-space:pre-wrap; line-height:1.35; cursor:pointer; }
   .cmtBtn{ background:transparent; border:none; cursor:pointer; padding:2px 6px; font-size:15px; opacity:.6; }
+  @media (min-width:768px){
+    .app{ max-width:600px; border-left:1px solid var(--line); border-right:1px solid var(--line); }
+    .tabsRow{ flex-wrap:wrap; overflow-x:visible; }
+    .overlay{ align-items:center; padding:24px; }
+    .sheet{ max-width:560px; border-radius:20px; }
+    .fab{ right:auto; left:50%; transform:translateX(216px); }
+    .menu{ right:calc(50vw - 286px); }
+    .gridWrap{ grid-template-columns:1fr 1fr 1fr; }
+    .scroll{ scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+    .scroll::-webkit-scrollbar{ width:8px; }
+    .scroll::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+    .scroll::-webkit-scrollbar-track{ background:transparent; }
+    .goalCard:hover{ background:var(--card); }
+    .menuItem:hover{ background:var(--line); }
+    .chip:hover{ border-color:var(--sub); }
+    .gTile:hover, .shelfCard:hover{ border-color:var(--sub); }
+    .iconBtn:hover, .cmtBtn:hover{ opacity:.7; }
+    .statNavBtn:hover, .ghostBtn:hover{ background:var(--line); }
+    .primaryBtn:hover, .saveWide:hover, .fab:hover{ filter:brightness(1.06); }
+  }
   @media (display-mode: standalone), (display-mode: fullscreen){
     .app{ padding-top:env(safe-area-inset-top); }
   }
@@ -273,6 +296,7 @@ function today0(){ var t=new Date(); t.setHours(0,0,0,0); return t; }
 function dateKey(d){ var x=new Date(d); return x.getFullYear()+"-"+pad2(x.getMonth()+1)+"-"+pad2(x.getDate()); }
 function todayKey(){ return dateKey(new Date()); }
 function shiftDay(key,delta){ var p=key.split("-"); var d=new Date(+p[0],+p[1]-1,+p[2]); d.setDate(d.getDate()+delta); return dateKey(d); }
+function daySpan(a,b){ var pa=a.split("-"),pb=b.split("-"); return Math.round((new Date(+pb[0],+pb[1]-1,+pb[2])-new Date(+pa[0],+pa[1]-1,+pa[2]))/86400000)+1; }
 function humanDate(key){ var p=key.split("-"); var d=new Date(+p[0],+p[1]-1,+p[2]); return d.toLocaleDateString("ru-RU",{weekday:"short",day:"numeric",month:"long"}); }
 function countTotal(s){ var t=0, lg=s.log||{}; for(var k in lg){ if(lg[k]!==true) t+=(+lg[k]||0); } return t; }
 function setStageTotalInLog(lg,T){ var keys=Object.keys(lg).filter(function(k){ return k!=="legacy" && lg[k]!==true; }); var datedSum=0; keys.forEach(function(k){ datedSum+=(+lg[k]||0); }); if(T>=datedSum){ var leg=T-datedSum; if(leg===0)delete lg["legacy"]; else lg["legacy"]=leg; } else { var need=datedSum-T; keys.sort().reverse(); for(var i=0;i<keys.length && need>0;i++){ var k=keys[i]; var v=+lg[k]||0; var take=Math.min(v,need); v-=take; need-=take; if(v<=0)delete lg[k]; else lg[k]=v; } delete lg["legacy"]; } return lg; }
@@ -301,6 +325,7 @@ function nextStep(g){ var st=g.stages||[], i, s;
   for(i=0;i<st.length;i++){ s=st[i]; if(stageKind(s)==="once" && !s.done) return s.text; }
   for(i=0;i<st.length;i++){ s=st[i]; if(stageKind(s)==="count" && stageContribution(s)<1) return s.text; }
   return null; }
+function nextStepText(g){ var st=g.stages||[]; for(var i=0;i<st.length;i++){ var s=st[i]; if(s.next && !(stageKind(s)==="once" && s.done)) return s.text; } return null; }
 function isCompleted(g){ return (g.stages&&g.stages.length>0) && progressOf(g)===100; }
 var STATUS=[["active","Актуально","#5BB974"],["hold","На стопе","#E0A458"],["done","Завершено","#7C8AA0"]];
 function statusChipEl(g){ var st=g.status||"active"; if(st==="active")return null; var m={hold:["На стопе","#E0A458"],done:["Завершено","#7C8AA0"]}[st]; if(!m)return null; return h("span",{class:"statusChip", style:{background:m[1]+"33",color:m[1]}}, m[0]); }
@@ -484,7 +509,7 @@ function ListView(){
         h("div",{class:"goalTitle"}, state.useShort?reportTitle(g):g.title),
         statusChipEl(g),
         h("div",{class:"goalSub"}, daysLeftLabel(dl)),
-        (function(){ if((g.status||"active")!=="active") return null; var ns=nextStep(g); return ns?h("div",{class:"nextStep"},"→ "+ns):null; })(),
+        (function(){ if((g.status||"active")!=="active") return null; var ns=nextStepText(g); return ns?h("div",{class:"nextStep"},"→ "+ns):null; })(),
         h("div",{class:"pctRow"}, h("span",{class:"pct"}, p+"%")),
         h("div",{class:"track"}, h("div",{class:"fill", style:{width:p+"%"}}))
       )
@@ -536,6 +561,7 @@ function DescTab(g){
     seg.appendChild(h("button",{class:"statusSegBtn", style:on?{background:st[2],borderColor:st[2],color:"#fff"}:{}, onClick:function(){ updateGoal(g.id,{status:st[0], doneAt:(st[0]==="done"?(g.doneAt||todayKey()):null)}); render(); }}, st[1])); });
   box.appendChild(seg);
   if(isCompleted(g) && (g.reward||"").trim()) box.appendChild(h("div",{style:{background:"rgba(91,185,116,.14)",border:"1px solid #5BB974",borderRadius:"14px",padding:"14px 16px",marginBottom:"20px",fontSize:"15px",lineHeight:"1.4"}}, "🎁 Цель достигнута! Твоя награда: "+g.reward.trim()));
+  if(nextStepText(g)) box.appendChild(h("div",{class:"field"}, h("div",{class:"fieldLabel"},"Ближайший шаг"), h("div",{class:"fieldValue",style:{color:"var(--accent)"}},"→ "+nextStepText(g))));
   box.appendChild(field("Мотивация",g.motivation));
   box.appendChild(field("Награда",g.reward));
   box.appendChild(field("Как я пойму, что цель достигнута",g.criteria));
@@ -551,7 +577,7 @@ function StagesTab(g){
   var box=h("div",{style:{padding:"4px 0 110px"}});
   var stages=g.stages||[];
   if(!stages.length){ box.appendChild(h("div",{class:"empty"}, h("p",null,"Этапов пока нет. Нажми +, чтобы добавить."))); }
-  else { box.appendChild(h("div",{style:{fontSize:"12px",color:"var(--sub)",padding:"8px 20px 2px",lineHeight:"1.4"}},"Удерживай и тяни этап, чтобы поменять порядок. Нажми на текст, чтобы изменить. Отмечать привычки и счётчики — во вкладке «Отчёт». Галочка = отметить этап выполненным.")); }
+  else { box.appendChild(h("div",{style:{fontSize:"12px",color:"var(--sub)",padding:"8px 20px 2px",lineHeight:"1.4"}},"Удерживай и тяни этап, чтобы поменять порядок. Нажми на текст, чтобы изменить. Отмечать привычки и счётчики — во вкладке «Отчёт». Галочка = отметить этап выполненным. «→ сделать следующим» — пометить ближайший шаг: он появится на карточке цели.")); }
   var listWrap=h("div",{class:"stageList"});
   stages.forEach(function(s){
     var k=stageKind(s);
@@ -566,6 +592,7 @@ function StagesTab(g){
     top.appendChild(h("span",{class:"dragHandle"}, icon("grip",20,"var(--sub)")));
     item.appendChild(top);
     var chips=[];
+    if(!(k==="once" && s.done)) chips.push(h("button",{class:"nextChip"+(s.next?" on":""), onClick:function(e){ e.stopPropagation(); setNextStage(g,s.id); }}, s.next?"→ Следующий шаг":"→ сделать следующим"));
     if(k==="daily") chips.push(h("span",{class:"kindChip"}, "ежедневно · в этом месяце: "+monthCount(s)));
     if(k==="count" && stagePeriod(s)!=="total") chips.push(h("span",{class:"kindChip"}, periodWord(s)));
     if(s.deadline){ var over=isOverdue(s); chips.push(h("span",{class:"stageDlChip"+(over?" over":" set")}, icon("clock",13,over?"#E5674F":"var(--accent)"), h("span",null, new Date(s.deadline).toLocaleDateString("ru-RU",{day:"numeric",month:"short"})+(over?(" · просрочено "+overdueDays(s)+" дн."):"")))); }
@@ -578,6 +605,7 @@ function StagesTab(g){
 }
 function toggleDaily(g,id,key){ var cg=goalById(g.id)||g; updateGoal(g.id,{stages:(cg.stages||[]).map(function(s){ if(s.id!==id)return s; var lg=Object.assign({},s.log||{}); if(lg[key])delete lg[key]; else lg[key]=true; return Object.assign({},s,{log:lg}); })}); syncReportNote(g.id,key); render(); }
 function stepDayCount(g,id,key,delta){ var cg=goalById(g.id)||g; updateGoal(g.id,{stages:(cg.stages||[]).map(function(s){ if(s.id!==id)return s; var lg=Object.assign({},s.log||{}); var cur=(lg[key]===true?0:(+lg[key]||0)); var nv=cur+delta; if(nv<0)nv=0; if(nv===0)delete lg[key]; else lg[key]=nv; return Object.assign({},s,{log:lg}); })}); syncReportNote(g.id,key); render(); }
+function setNextStage(g,id){ var cg=goalById(g.id)||g; updateGoal(g.id,{stages:(cg.stages||[]).map(function(s){ var on=(s.id===id)?!s.next:false; return Object.assign({},s,{next:on}); })}); render(); }
 function toggleStage(g,id){ updateGoal(g.id,{stages:g.stages.map(function(s){ if(s.id!==id)return s; var nd=!s.done; return Object.assign({},s,{done:nd,doneDate:nd?todayKey():null}); })}); render(); }
 function removeStage(g,id){ updateGoal(g.id,{stages:g.stages.filter(function(s){return s.id!==id;})}); render(); }
 function commitStageOrder(g,order){ var cur=activeGoal(); var map={}; (cur.stages||[]).forEach(function(s){ map[s.id]=s; }); updateGoal(cur.id,{stages:order.map(function(id){ return map[id]; }).filter(Boolean)}); render(); }
@@ -650,8 +678,8 @@ function dayReport(g,key){
 }
 function periodReport(g,gran,key){
   if(gran==="day") return dayReport(g,key);
-  var r=(gran==="week")?weekBounds(key):monthBounds(key), a=r[0], b=r[1], lines=[], positive=false;
-  var dp=(gran==="week")?7:daysInMonth(key);
+  var r=(gran==="week")?weekBounds(key):(gran==="range")?key:monthBounds(key), a=r[0], b=r[1], lines=[], positive=false;
+  var dp=(gran==="week")?7:(gran==="range")?daySpan(a,b):daysInMonth(key);
   (g.stages||[]).forEach(function(s){ var k=stageKind(s);
     if(k==="once"){ if(s.done && s.doneDate && s.doneDate>=a && s.doneDate<=b){ positive=true; lines.push("✅ "+s.text); } }
     else if(k==="daily"){ var n=daysDoneInRange(s,a,b); if(n>0){ positive=true; lines.push("🔁 "+s.text+": "+n+" из "+dp); } }
@@ -1306,17 +1334,20 @@ function ShelfView(){
 /* ---------- ВЫГРУЗКА ДЛЯ ИИ ---------- */
 var AI_REVIEW_PROMPT=["Ты — мой коуч по целям. Ниже мои отчёты за период. Проанализируй их и ответь по-русски, коротко и по делу:","1. Что получилось лучше всего и за счёт чего.","2. Где я забуксовала: какие цели и привычки без движения и что мешало (смотри мои комментарии и рефлексию).","3. Какие паттерны видно по дням: дни-провалы, дни-пики, связки привычек.","4. Три конкретных маленьких шага на следующую неделю.","5. Один вопрос мне для рефлексии.","Опирайся только на отчёты ниже, ничего не выдумывай."].join("\n");
 function buildAiExport(gran,key,withPrompt){
-  var r=(gran==="week")?weekBounds(key):monthBounds(key), a=r[0], b=r[1];
+  var a,b;
+  if(gran==="range"){ a=state.aiFrom||todayKey(); b=state.aiTo||todayKey(); if(a>b){ var tmp=a; a=b; b=tmp; } }
+  else { var r=(gran==="week")?weekBounds(key):monthBounds(key); a=r[0]; b=r[1]; }
   var out=[];
   if(withPrompt){ out.push(AI_REVIEW_PROMPT,""); }
-  out.push("Отчёты по целям — "+((gran==="week")?"неделя ":"")+reportLabel(gran,key),"(выгрузка для анализа, собрана "+humanDate(todayKey())+")","");
+  var lbl=(gran==="range")?(humanDate(a)+" — "+humanDate(b)):(((gran==="week")?"неделя ":"")+reportLabel(gran,key));
+  out.push("Отчёты по целям — "+lbl,"(выгрузка для анализа, собрана "+humanDate(todayKey())+")","");
   out.push("===== СВОДКА ЗА ПЕРИОД =====","");
   var any=false;
-  state.goals.forEach(function(g){ var lines=periodReport(g,gran,key); if(!lines.length)return; any=true; out.push((g.emoji?g.emoji+" ":"")+reportTitle(g)); lines.forEach(function(l){ out.push(l); }); out.push(""); });
+  state.goals.forEach(function(g){ var lines=periodReport(g,(gran==="range")?"range":gran,(gran==="range")?[a,b]:key); if(!lines.length)return; any=true; out.push((g.emoji?g.emoji+" ":"")+reportTitle(g)); lines.forEach(function(l){ out.push(l); }); out.push(""); });
   if(!any) out.push("Движения по целям не было.","");
   out.push("===== ПО ДНЯМ =====","");
   var dk=a, guard=0;
-  while(dk<=b && guard<32){
+  while(dk<=b && guard<190){
     guard++;
     var parts=[];
     state.goals.forEach(function(g){
@@ -1341,13 +1372,23 @@ function AiExportModal(){
   var body=h("div",null);
   body.appendChild(h("div",{style:{color:"var(--sub)",fontSize:"14px",marginBottom:"10px",lineHeight:"1.45"}},"Собирает отчёты, комментарии, записи и рефлексию за период одним текстом — отправь его ИИ или ментору для анализа."));
   var seg=h("div",{class:"statusSeg"});
-  [["week","Неделя"],["month","Месяц"]].forEach(function(x){ var on=gran===x[0];
+  [["week","Неделя"],["month","Месяц"],["range","Период"]].forEach(function(x){ var on=gran===x[0];
     seg.appendChild(h("button",{class:"statusSegBtn", style:on?{background:"var(--accent)",borderColor:"var(--accent)",color:"var(--onAccent)"}:{}, onClick:function(){ state.aiGran=x[0]; render(); }}, x[1])); });
   body.appendChild(seg);
+  if(gran==="range"){
+    if(!state.aiFrom) state.aiFrom=shiftDay(todayKey(),-6);
+    if(!state.aiTo) state.aiTo=todayKey();
+    var df=h("input",{class:"inp",type:"date"}); df.value=state.aiFrom; df.addEventListener("input",function(){ state.aiFrom=df.value; });
+    var dt2=h("input",{class:"inp",type:"date"}); dt2.value=state.aiTo; dt2.addEventListener("input",function(){ state.aiTo=dt2.value; });
+    body.appendChild(h("div",{class:"row",style:{margin:"0 0 12px"}},
+      h("div",{style:{flex:"1"}}, h("label",{class:"mLabel",style:{margin:"4px 0 5px"}},"С даты"), df),
+      h("div",{style:{flex:"1"}}, h("label",{class:"mLabel",style:{margin:"4px 0 5px"}},"По дату"), dt2)));
+  } else {
   body.appendChild(h("div",{class:"dayNav",style:{padding:"0 0 12px"}},
     h("button",{class:"statNavBtn", onClick:function(){ state.aiKey=reportShift(gran,key,-1); render(); }}, icon("chevronLeft",20,"var(--text)")),
     h("div",{style:{flex:"1",textAlign:"center",fontWeight:"700",textTransform:"capitalize"}}, reportLabel(gran,key)),
     h("button",{class:"statNavBtn", onClick:function(){ state.aiKey=reportShift(gran,key,1); render(); }}, icon("chevronRight",20,"var(--text)"))));
+  }
   if(state.aiPrompt==null) state.aiPrompt=true;
   body.appendChild(h("button",{class:"menuItem", style:{border:"1px solid var(--line)",borderRadius:"12px",marginBottom:"4px"}, onClick:function(){ state.aiPrompt=!state.aiPrompt; render(); }},
     h("span",{style:{fontSize:"14.5px"}},"Добавить задание для ИИ-ревью"),
