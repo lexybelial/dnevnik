@@ -155,6 +155,8 @@
   .menuItem.danger{ color:var(--danger); }
   .menuHeader{ font-size:12px; color:var(--sub); padding:10px 14px 4px; text-transform:uppercase; letter-spacing:.04em; }
   .menuSep{ height:1px; background:var(--line); margin:6px 8px; }
+  .nextStep{ color:var(--accent); font-size:13px; margin:0 0 8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .shelfCard{ display:flex; gap:14px; align-items:center; margin:0 16px 12px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; cursor:pointer; }
   .spin{ width:30px; height:30px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--accent); animation:spin .8s linear infinite; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
   .busyBox{ background:var(--card); border-radius:16px; padding:24px 30px; display:flex; flex-direction:column; align-items:center; gap:14px; }
@@ -295,6 +297,10 @@ function stageContribution(s){ var k=stageKind(s);
 }
 function progressOf(g){ if(!g.stages||!g.stages.length)return 0; var sum=0; g.stages.forEach(function(s){ sum+=stageContribution(s); }); return Math.round(sum/g.stages.length*100); }
 function noteCount(g){ return (g.notes||[]).length; }
+function nextStep(g){ var st=g.stages||[], i, s;
+  for(i=0;i<st.length;i++){ s=st[i]; if(stageKind(s)==="once" && !s.done) return s.text; }
+  for(i=0;i<st.length;i++){ s=st[i]; if(stageKind(s)==="count" && stageContribution(s)<1) return s.text; }
+  return null; }
 function isCompleted(g){ return (g.stages&&g.stages.length>0) && progressOf(g)===100; }
 var STATUS=[["active","Актуально","#5BB974"],["hold","На стопе","#E0A458"],["done","Завершено","#7C8AA0"]];
 function statusChipEl(g){ var st=g.status||"active"; if(st==="active")return null; var m={hold:["На стопе","#E0A458"],done:["Завершено","#7C8AA0"]}[st]; if(!m)return null; return h("span",{class:"statusChip", style:{background:m[1]+"33",color:m[1]}}, m[0]); }
@@ -414,6 +420,7 @@ function render(){
   else if(state.view==="report") view=ReportView();
   else if(state.view==="tracker") view=TrackerView();
   else if(state.view==="habitstat") view=HabitStatView();
+  else if(state.view==="shelf") view=ShelfView();
   root.appendChild(view);
   if(state.modal==="note") root.appendChild(NoteModal());
   if(state.modal==="cats") root.appendChild(CatModal());
@@ -477,6 +484,7 @@ function ListView(){
         h("div",{class:"goalTitle"}, state.useShort?reportTitle(g):g.title),
         statusChipEl(g),
         h("div",{class:"goalSub"}, daysLeftLabel(dl)),
+        (function(){ if((g.status||"active")!=="active") return null; var ns=nextStep(g); return ns?h("div",{class:"nextStep"},"→ "+ns):null; })(),
         h("div",{class:"pctRow"}, h("span",{class:"pct"}, p+"%")),
         h("div",{class:"track"}, h("div",{class:"fill", style:{width:p+"%"}}))
       )
@@ -525,7 +533,7 @@ function DescTab(g){
   box.appendChild(h("h2",{class:"detailTitle"}, g.title));
   var seg=h("div",{class:"statusSeg"});
   STATUS.forEach(function(st){ var on=(g.status||"active")===st[0];
-    seg.appendChild(h("button",{class:"statusSegBtn", style:on?{background:st[2],borderColor:st[2],color:"#fff"}:{}, onClick:function(){ updateGoal(g.id,{status:st[0]}); render(); }}, st[1])); });
+    seg.appendChild(h("button",{class:"statusSegBtn", style:on?{background:st[2],borderColor:st[2],color:"#fff"}:{}, onClick:function(){ updateGoal(g.id,{status:st[0], doneAt:(st[0]==="done"?(g.doneAt||todayKey()):null)}); render(); }}, st[1])); });
   box.appendChild(seg);
   if(isCompleted(g) && (g.reward||"").trim()) box.appendChild(h("div",{style:{background:"rgba(91,185,116,.14)",border:"1px solid #5BB974",borderRadius:"14px",padding:"14px 16px",marginBottom:"20px",fontSize:"15px",lineHeight:"1.4"}}, "🎁 Цель достигнута! Твоя награда: "+g.reward.trim()));
   box.appendChild(field("Мотивация",g.motivation));
@@ -939,6 +947,7 @@ function MenuOverlay(){
       opts.check ? icon("check",18,"var(--accent)") : null);
   }
   if(state.menu==="list"){
+    menu.appendChild(item("Полка достижений 🏆", function(){ state.menu=null; state.view="shelf"; render(); }));
     menu.appendChild(item("Статистика активности", function(){ state.menu=null; state.view="stats"; render(); }));
     menu.appendChild(item("Только актуальные", toggleOnlyActive, {check:state.onlyActive}));
     menu.appendChild(item("Короткие названия целей", function(){ state.useShort=!state.useShort; try{localStorage.setItem("marina-useshort",state.useShort?"1":"0");}catch(e){} scheduleCloud("meta"); state.menu=null; render(); }, {check:state.useShort}));
@@ -1267,10 +1276,40 @@ function showBusy(t){ hideBusy(); var o=h("div",{id:"busyOv",class:"overlay",sty
 function hideBusy(){ var o=document.getElementById("busyOv"); if(o)o.remove(); }
 function curStreak(s){ var n=0,k=todayKey(); if(!(s.log&&s.log[k])) k=shiftDay(k,-1); while(s.log&&s.log[k]){ n++; k=shiftDay(k,-1); } return n; }
 
+/* ---------- ПОЛКА ДОСТИЖЕНИЙ ---------- */
+function ShelfView(){
+  var app=h("div",{class:"app"});
+  app.appendChild(h("div",{class:"header"},
+    h("button",{class:"iconBtn", onClick:function(){ state.view="list"; render(); }}, icon("chevronLeft",26,"var(--text)")),
+    h("span",{style:{color:"var(--text)",fontWeight:"600"}},"Полка достижений"),
+    h("div",{style:{width:"26px"}})));
+  var scroll=h("div",{class:"scroll"});
+  var doneGoals=state.goals.filter(function(g){ return (g.status||"active")==="done" || isCompleted(g); });
+  doneGoals.sort(function(a,b){ return String(b.doneAt||b.completionDate||"").localeCompare(String(a.doneAt||a.completionDate||"")); });
+  scroll.appendChild(h("div",{style:{padding:"10px 20px 14px",color:"var(--sub)",fontSize:"14px"}}, doneGoals.length?("Завершено: "+doneGoals.length+" "+plural(doneGoals.length,"цель","цели","целей")+" 🎉"):""));
+  if(!doneGoals.length){ scroll.appendChild(h("div",{class:"empty"}, h("span",{style:{fontSize:"40px"}},"🏆"), h("p",{style:{marginTop:"12px"}, html:"Здесь появятся завершённые цели<br>и твои награды за них."}))); }
+  doneGoals.forEach(function(g){
+    var when=g.doneAt||null;
+    scroll.appendChild(h("div",{class:"shelfCard", onClick:(function(gg){ return function(){ state.detailReturn="shelf"; state.activeId=gg.id; state.tab="desc"; state.view="detail"; render(); }; })(g)},
+      coverEl(g,56,72,12,26),
+      h("div",{style:{flex:"1",minWidth:"0"}},
+        h("div",{style:{fontWeight:"700",fontSize:"15.5px",lineHeight:"1.25",marginBottom:"4px"}}, g.title),
+        when?h("div",{style:{color:"var(--sub)",fontSize:"12.5px",marginBottom:"4px"}},"Завершена "+fmtDate(when)):null,
+        (g.reward&&g.reward.trim())?h("div",{style:{color:"var(--accent)",fontSize:"13.5px",lineHeight:"1.35"}},"🎁 "+g.reward.trim()):h("div",{style:{color:"var(--sub)",fontSize:"13px"}},"Без награды — может, придумаешь себе задним числом?")),
+      h("span",{style:{fontSize:"22px"}},"🏆")));
+  });
+  scroll.appendChild(h("div",{style:{height:"40px"}}));
+  app.appendChild(scroll);
+  return app;
+}
+
 /* ---------- ВЫГРУЗКА ДЛЯ ИИ ---------- */
-function buildAiExport(gran,key){
+var AI_REVIEW_PROMPT=["Ты — мой коуч по целям. Ниже мои отчёты за период. Проанализируй их и ответь по-русски, коротко и по делу:","1. Что получилось лучше всего и за счёт чего.","2. Где я забуксовала: какие цели и привычки без движения и что мешало (смотри мои комментарии и рефлексию).","3. Какие паттерны видно по дням: дни-провалы, дни-пики, связки привычек.","4. Три конкретных маленьких шага на следующую неделю.","5. Один вопрос мне для рефлексии.","Опирайся только на отчёты ниже, ничего не выдумывай."].join("\n");
+function buildAiExport(gran,key,withPrompt){
   var r=(gran==="week")?weekBounds(key):monthBounds(key), a=r[0], b=r[1];
-  var out=["Отчёты по целям — "+((gran==="week")?"неделя ":"")+reportLabel(gran,key),"(выгрузка для анализа, собрана "+humanDate(todayKey())+")",""];
+  var out=[];
+  if(withPrompt){ out.push(AI_REVIEW_PROMPT,""); }
+  out.push("Отчёты по целям — "+((gran==="week")?"неделя ":"")+reportLabel(gran,key),"(выгрузка для анализа, собрана "+humanDate(todayKey())+")","");
   out.push("===== СВОДКА ЗА ПЕРИОД =====","");
   var any=false;
   state.goals.forEach(function(g){ var lines=periodReport(g,gran,key); if(!lines.length)return; any=true; out.push((g.emoji?g.emoji+" ":"")+reportTitle(g)); lines.forEach(function(l){ out.push(l); }); out.push(""); });
@@ -1309,13 +1348,17 @@ function AiExportModal(){
     h("button",{class:"statNavBtn", onClick:function(){ state.aiKey=reportShift(gran,key,-1); render(); }}, icon("chevronLeft",20,"var(--text)")),
     h("div",{style:{flex:"1",textAlign:"center",fontWeight:"700",textTransform:"capitalize"}}, reportLabel(gran,key)),
     h("button",{class:"statNavBtn", onClick:function(){ state.aiKey=reportShift(gran,key,1); render(); }}, icon("chevronRight",20,"var(--text)"))));
+  if(state.aiPrompt==null) state.aiPrompt=true;
+  body.appendChild(h("button",{class:"menuItem", style:{border:"1px solid var(--line)",borderRadius:"12px",marginBottom:"4px"}, onClick:function(){ state.aiPrompt=!state.aiPrompt; render(); }},
+    h("span",{style:{fontSize:"14.5px"}},"Добавить задание для ИИ-ревью"),
+    state.aiPrompt?icon("check",18,"var(--accent)"):null));
   var okMsg=h("div",{style:{color:"#5BB974",fontSize:"13px",minHeight:"16px",marginTop:"6px"}},"");
   var pre=h("div",{class:"reportNote",style:{maxHeight:"32vh",overflowY:"auto",display:"none",marginTop:"10px"}});
   var built="";
   var act=h("div",{class:"mActions"});
-  act.appendChild(h("button",{class:"ghostBtn", onClick:function(){ showBusy("Собираю текст…"); setTimeout(function(){ built=buildAiExport(state.aiGran,state.aiKey); hideBusy(); pre.textContent=built; pre.style.display="block"; okMsg.textContent="Готово: "+Math.round(built.length/1024*10)/10+" КБ"; },60); }},"Показать"));
+  act.appendChild(h("button",{class:"ghostBtn", onClick:function(){ showBusy("Собираю текст…"); setTimeout(function(){ built=buildAiExport(state.aiGran,state.aiKey,state.aiPrompt); hideBusy(); pre.textContent=built; pre.style.display="block"; okMsg.textContent="Готово: "+Math.round(built.length/1024*10)/10+" КБ"; },60); }},"Показать"));
   act.appendChild(h("div",{style:{flex:"1"}}));
-  act.appendChild(h("button",{class:"primaryBtn", onClick:function(){ showBusy("Собираю текст…"); setTimeout(function(){ built=buildAiExport(state.aiGran,state.aiKey); hideBusy(); if(copyPlain(built)) okMsg.textContent="Скопировано ✔ — вставь в чат с ИИ"; else okMsg.textContent="Не удалось скопировать"; },60); }},"Скопировать текст"));
+  act.appendChild(h("button",{class:"primaryBtn", onClick:function(){ showBusy("Собираю текст…"); setTimeout(function(){ built=buildAiExport(state.aiGran,state.aiKey,state.aiPrompt); hideBusy(); if(copyPlain(built)) okMsg.textContent="Скопировано ✔ — вставь в чат с ИИ"; else okMsg.textContent="Не удалось скопировать"; },60); }},"Скопировать текст"));
   body.appendChild(act);
   body.appendChild(okMsg);
   body.appendChild(pre);
