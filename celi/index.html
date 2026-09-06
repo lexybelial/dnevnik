@@ -429,7 +429,7 @@ var state = { goals:[], cats:DEFAULT_CATS.slice(), images:{}, view:"list", activ
 function saveGoals(){ try{ localStorage.setItem(KEY, JSON.stringify(state.goals)); }catch(e){} scheduleCloud("goals"); }
 function saveCats(){ try{ localStorage.setItem(KEY_CATS, JSON.stringify(state.cats)); }catch(e){} scheduleCloud("meta"); }
 function activeGoal(){ return state.goals.filter(function(g){return g.id===state.activeId;})[0]||null; }
-function updateGoal(id,patch){ state.goals=state.goals.map(function(g){ return g.id===id?Object.assign({},g,patch):g; }); saveGoals(); }
+function updateGoal(id,patch){ state.goals=state.goals.map(function(g){ return g.id===id?Object.assign({},g,patch,{updatedAt:Date.now()}):g; }); saveGoals(); }
 
 function addImage(file){ return resizeImage(file).then(function(data){ var id=uid(); state.images[id]=data; idbSet(id,data).catch(function(){}); cloudPutImage(id,data); return id; }); }
 
@@ -577,7 +577,7 @@ function StagesTab(g){
   var box=h("div",{style:{padding:"4px 0 110px"}});
   var stages=g.stages||[];
   if(!stages.length){ box.appendChild(h("div",{class:"empty"}, h("p",null,"Этапов пока нет. Нажми +, чтобы добавить."))); }
-  else { box.appendChild(h("div",{style:{fontSize:"12px",color:"var(--sub)",padding:"8px 20px 2px",lineHeight:"1.4"}},"Удерживай и тяни этап, чтобы поменять порядок. Нажми на текст, чтобы изменить. Отмечать привычки и счётчики — во вкладке «Отчёт». Галочка = отметить этап выполненным. «→ сделать следующим» — пометить ближайший шаг: он появится на карточке цели.")); }
+  else { box.appendChild(h("div",{style:{fontSize:"12px",color:"var(--sub)",padding:"8px 20px 2px",lineHeight:"1.4"}},"Удерживай и тяни этап, чтобы поменять порядок. Нажми на текст, чтобы изменить. Отмечать привычки и счётчики — во вкладке «Отчёт». Галочка = отметить этап выполненным. Назначить «Следующий шаг» можно в настройках этапа — нажми на его текст.")); }
   var listWrap=h("div",{class:"stageList"});
   stages.forEach(function(s){
     var k=stageKind(s);
@@ -592,7 +592,7 @@ function StagesTab(g){
     top.appendChild(h("span",{class:"dragHandle"}, icon("grip",20,"var(--sub)")));
     item.appendChild(top);
     var chips=[];
-    if(!(k==="once" && s.done)) chips.push(h("button",{class:"nextChip"+(s.next?" on":""), onClick:function(e){ e.stopPropagation(); setNextStage(g,s.id); }}, s.next?"→ Следующий шаг":"→ сделать следующим"));
+    if(s.next && !(k==="once" && s.done)) chips.push(h("span",{class:"nextChip on"},"→ Следующий шаг"));
     if(k==="daily") chips.push(h("span",{class:"kindChip"}, "ежедневно · в этом месяце: "+monthCount(s)));
     if(k==="count" && stagePeriod(s)!=="total") chips.push(h("span",{class:"kindChip"}, periodWord(s)));
     if(s.deadline){ var over=isOverdue(s); chips.push(h("span",{class:"stageDlChip"+(over?" over":" set")}, icon("clock",13,over?"#E5674F":"var(--accent)"), h("span",null, new Date(s.deadline).toLocaleDateString("ru-RU",{day:"numeric",month:"short"})+(over?(" · просрочено "+overdueDays(s)+" дн."):"")))); }
@@ -605,11 +605,10 @@ function StagesTab(g){
 }
 function toggleDaily(g,id,key){ var cg=goalById(g.id)||g; updateGoal(g.id,{stages:(cg.stages||[]).map(function(s){ if(s.id!==id)return s; var lg=Object.assign({},s.log||{}); if(lg[key])delete lg[key]; else lg[key]=true; return Object.assign({},s,{log:lg}); })}); syncReportNote(g.id,key); render(); }
 function stepDayCount(g,id,key,delta){ var cg=goalById(g.id)||g; updateGoal(g.id,{stages:(cg.stages||[]).map(function(s){ if(s.id!==id)return s; var lg=Object.assign({},s.log||{}); var cur=(lg[key]===true?0:(+lg[key]||0)); var nv=cur+delta; if(nv<0)nv=0; if(nv===0)delete lg[key]; else lg[key]=nv; return Object.assign({},s,{log:lg}); })}); syncReportNote(g.id,key); render(); }
-function setNextStage(g,id){ var cg=goalById(g.id)||g; updateGoal(g.id,{stages:(cg.stages||[]).map(function(s){ var on=(s.id===id)?!s.next:false; return Object.assign({},s,{next:on}); })}); render(); }
 function toggleStage(g,id){ updateGoal(g.id,{stages:g.stages.map(function(s){ if(s.id!==id)return s; var nd=!s.done; return Object.assign({},s,{done:nd,doneDate:nd?todayKey():null}); })}); render(); }
 function removeStage(g,id){ updateGoal(g.id,{stages:g.stages.filter(function(s){return s.id!==id;})}); render(); }
 function commitStageOrder(g,order){ var cur=activeGoal(); var map={}; (cur.stages||[]).forEach(function(s){ map[s.id]=s; }); updateGoal(cur.id,{stages:order.map(function(id){ return map[id]; }).filter(Boolean)}); render(); }
-function openStageEditor(g,s){ state.stageDraft = s ? {id:s.id, text:s.text, kind:stageKind(s), deadline:s.deadline||"", target:(s.target||"")+"", mode:s.mode||"step", period:s.period||"total", curTotal:(stageKind(s)==="count"?countTotal(s):"")} : {id:null, text:"", kind:"once", deadline:"", target:"", mode:"step", period:"total", curTotal:""}; state.modal="stage"; render(); }
+function openStageEditor(g,s){ state.stageDraft = s ? {id:s.id, text:s.text, kind:stageKind(s), deadline:s.deadline||"", target:(s.target||"")+"", mode:s.mode||"step", period:s.period||"total", next:!!s.next, curTotal:(stageKind(s)==="count"?countTotal(s):"")} : {id:null, text:"", kind:"once", deadline:"", target:"", mode:"step", period:"total", next:false, curTotal:""}; state.modal="stage"; render(); }
 function StageModal(){
   var d=state.stageDraft, g=activeGoal();
   var body=h("div",null);
@@ -644,6 +643,9 @@ function StageModal(){
   var dt=h("input",{class:"inp",type:"date",style:{marginBottom:"0"}}); dt.value=d.deadline; dt.addEventListener("input",function(){ d.deadline=dt.value; }); dtRow.appendChild(dt);
   dtRow.appendChild(h("button",{class:"ghostBtn", onClick:function(){ d.deadline=""; render(); }},"Убрать"));
   body.appendChild(dtRow);
+  body.appendChild(h("button",{class:"menuItem", style:{border:"1px solid var(--line)",borderRadius:"12px",margin:"14px 0 2px"}, onClick:function(){ d.next=!d.next; render(); }},
+    h("span",{style:{fontSize:"14.5px"}},"→ Следующий шаг (виден на карточке цели)"),
+    d.next?icon("check",18,"var(--accent)"):null));
   var act=h("div",{class:"mActions"});
   if(d.id) act.appendChild(h("button",{class:"delBtn", onClick:function(){ removeStage(g,d.id); state.modal=null; state.stageDraft=null; render(); }},"Удалить"));
   act.appendChild(h("div",{style:{flex:"1"}}));
@@ -657,9 +659,9 @@ function saveStageEditor(g){
   var tgt=parseInt(d.target,10); if(isNaN(tgt)||tgt<=0) tgt=0;
   var cur=activeGoal();
   if(d.id){
-    updateGoal(cur.id,{stages:cur.stages.map(function(s){ if(s.id!==d.id)return s; var ns=Object.assign({},s,{text:txt,kind:d.kind,deadline:d.deadline||null,target:tgt||null,mode:d.mode||"step",period:d.period||"total"}); if(!ns.log)ns.log={}; if(d.kind==="count" && d.curTotal!==""&&d.curTotal!=null){ var T=parseInt(d.curTotal,10); if(!isNaN(T)&&T>=0){ ns.log=setStageTotalInLog(Object.assign({},ns.log),T); } } return ns; })});
+    updateGoal(cur.id,{stages:cur.stages.map(function(s){ if(s.id!==d.id){ return (d.next&&s.next)?Object.assign({},s,{next:false}):s; } var ns=Object.assign({},s,{text:txt,kind:d.kind,deadline:d.deadline||null,target:tgt||null,mode:d.mode||"step",period:d.period||"total",next:!!d.next}); if(!ns.log)ns.log={}; if(d.kind==="count" && d.curTotal!==""&&d.curTotal!=null){ var T=parseInt(d.curTotal,10); if(!isNaN(T)&&T>=0){ ns.log=setStageTotalInLog(Object.assign({},ns.log),T); } } return ns; })});
   } else {
-    updateGoal(cur.id,{stages:(cur.stages||[]).concat([{id:uid(),text:txt,kind:d.kind,done:false,deadline:d.deadline||null,target:tgt||null,mode:d.mode||"step",period:d.period||"total",log:{}}])});
+    updateGoal(cur.id,{stages:(cur.stages||[]).map(function(s){ return (d.next&&s.next)?Object.assign({},s,{next:false}):s; }).concat([{id:uid(),text:txt,kind:d.kind,done:false,deadline:d.deadline||null,target:tgt||null,mode:d.mode||"step",period:d.period||"total",next:!!d.next,log:{}}])});
   }
   state.modal=null; state.stageDraft=null; render();
 }
@@ -914,7 +916,7 @@ function saveForm(){
   var d=state.draft;
   if(!d.title.trim()) return;
   if(d.id){ updateGoal(d.id,{title:d.title.trim(),shortName:d.shortName||"",motivation:d.motivation,reward:d.reward,criteria:d.criteria||"",completionDate:d.completionDate,category:d.category,cover:d.cover,emoji:d.emoji,photo:d.photo}); state.activeId=d.id; state.view="detail"; }
-  else { var g=Object.assign({},d,{id:uid(),title:d.title.trim()}); state.goals=[g].concat(state.goals); saveGoals(); state.activeId=g.id; state.view="detail"; }
+  else { var g=Object.assign({},d,{id:uid(),title:d.title.trim(),updatedAt:Date.now()}); state.goals=[g].concat(state.goals); saveGoals(); state.activeId=g.id; state.view="detail"; }
   state.draft=null; state.tab="desc"; render();
 }
 function deleteGoal(id){ state.goals=state.goals.filter(function(g){return g.id!==id;}); saveGoals(); state.draft=null; state.view="list"; render(); }
@@ -1157,6 +1159,7 @@ function doImport(txt, msg){
   if(!obj || !obj.goals){ if(msg)msg.textContent="В тексте нет данных целей."; return; }
   state.goals=obj.goals||[]; if(obj.cats)state.cats=obj.cats; if(obj.sort)state.sort=obj.sort; state.onlyActive=!!obj.onlyActive; state.images=obj.images||{}; if(obj.dayExtra){ state.dayExtra=obj.dayExtra; saveDayExtra(); } if(obj.theme){ state.theme=obj.theme; try{ localStorage.setItem("marina-theme",state.theme); }catch(e){} applyTheme(); }
   normalizeGoals();
+  var _ts=Date.now(); state.goals.forEach(function(g){ g.updatedAt=_ts; }); Object.keys(state.dayExtra||{}).forEach(function(k){ if(state.dayExtra[k])state.dayExtra[k].u=_ts; });
   saveGoals(); saveCats();
   try{ localStorage.setItem(KEY_SORT,state.sort); localStorage.setItem("marina-onlyactive-v1", state.onlyActive?"1":"0"); }catch(e){}
   Object.keys(state.images).forEach(function(id){ idbSet(id, state.images[id]).catch(function(){}); });
@@ -1169,9 +1172,9 @@ function copyPlain(text){ try{ if(navigator.clipboard&&navigator.clipboard.write
 function notesOnDay(g,key){ return (g.notes||[]).filter(function(n){ return dateKey(n.date)===key && ((n.text&&n.text.trim()) || notePhotos(n).length>0); }); }
 function notePhotos(n){ if(n.photos && n.photos.length) return n.photos; return n.photo?[n.photo]:[]; }
 function dayPhotoIds(key){ var out=[]; state.goals.forEach(function(g){ if((g.status||"active")!=="active")return; notesOnDay(g,key).forEach(function(n){ notePhotos(n).forEach(function(pid){ if(state.images[pid])out.push(pid); }); }); }); var dp=(state.dayExtra[key]&&state.dayExtra[key].photos)||[]; dp.forEach(function(pid){ if(state.images[pid])out.push(pid); }); return out; }
-function setDayExtra(key,field,val){ if(!state.dayExtra[key])state.dayExtra[key]={}; state.dayExtra[key][field]=val; saveDayExtra(); }
-function addDayPhoto(key,id){ if(!state.dayExtra[key])state.dayExtra[key]={}; if(!state.dayExtra[key].photos)state.dayExtra[key].photos=[]; state.dayExtra[key].photos.push(id); saveDayExtra(); render(); }
-function removeDayPhoto(key,idx){ if(state.dayExtra[key]&&state.dayExtra[key].photos){ state.dayExtra[key].photos.splice(idx,1); saveDayExtra(); render(); } }
+function setDayExtra(key,field,val){ if(!state.dayExtra[key])state.dayExtra[key]={}; state.dayExtra[key][field]=val; state.dayExtra[key].u=Date.now(); saveDayExtra(); }
+function addDayPhoto(key,id){ if(!state.dayExtra[key])state.dayExtra[key]={}; if(!state.dayExtra[key].photos)state.dayExtra[key].photos=[]; state.dayExtra[key].photos.push(id); state.dayExtra[key].u=Date.now(); saveDayExtra(); render(); }
+function removeDayPhoto(key,idx){ if(state.dayExtra[key]&&state.dayExtra[key].photos){ state.dayExtra[key].photos.splice(idx,1); state.dayExtra[key].u=Date.now(); saveDayExtra(); render(); } }
 function autoGrow(ta){ try{ ta.style.overflow="hidden"; ta.style.height="auto"; ta.style.height=(ta.scrollHeight+2)+"px"; }catch(e){} }
 function saveDayExtra(){ try{ localStorage.setItem("marina-dayextra-v1", JSON.stringify(state.dayExtra)); }catch(e){} scheduleCloud("days"); }
 function dataURLtoFile(durl,name){ try{ var arr=durl.split(","); var mime=(arr[0].match(/:(.*?);/)||[])[1]||"image/jpeg"; var bstr=atob(arr[1]); var n=bstr.length; var u8=new Uint8Array(n); while(n--)u8[n]=bstr.charCodeAt(n); return new File([u8],name,{type:mime}); }catch(e){ return null; } }
@@ -1546,7 +1549,15 @@ function pushCloud(kind){
   }
 }
 function cloudPutImage(id,data){ if(!cloudReady)return; try{ colImages().doc(id).set({d:data,ts:Date.now()}); }catch(e){} }
-function fullCloudPush(){ if(!cloudReady)return; lastSync={goals:{},days:{},meta:""}; pushCloud("goals"); pushCloud("days"); Object.keys(state.images).forEach(function(id){ cloudPutImage(id,state.images[id]); }); }
+function fullCloudPush(){ if(!cloudReady)return; lastSync={goals:{},days:{},meta:""};
+  var have={}; state.goals.forEach(function(g){ have[g.id]=1; });
+  colGoals().get().then(function(sn){ sn.docs.forEach(function(d){ if(!have[d.id]) colGoals().doc(d.id).delete(); }); }).catch(function(){});
+  var haveD={}; Object.keys(state.dayExtra||{}).forEach(function(k){ haveD[k]=1; });
+  colDays().get().then(function(sn){ sn.docs.forEach(function(d){ if(!haveD[d.id]) colDays().doc(d.id).delete(); }); }).catch(function(){});
+  pushCloud("goals"); pushCloud("days");
+  var pk=fbUser?("marina-imgpushed-"+fbUser.uid):null, pushed={};
+  Object.keys(state.images).forEach(function(id){ cloudPutImage(id,state.images[id]); pushed[id]=1; });
+  if(pk){ try{ localStorage.setItem(pk,JSON.stringify(pushed)); }catch(e){} } }
 function withTo(p,ms){ return Promise.race([p,new Promise(function(_,rj){ setTimeout(function(){ rj(new Error("timeout")); },ms); })]); }
 function neededImageIds(){ var ids={};
   state.goals.forEach(function(g){ if(g.photo)ids[g.photo]=1; (g.notes||[]).forEach(function(n){ notePhotos(n).forEach(function(pid){ ids[pid]=1; }); }); });
@@ -1561,26 +1572,48 @@ function hydrateImages(){
     if(missing.length && cloudReady){
       return Promise.all(missing.map(function(id){ return withTo(colImages().doc(id).get(),15000).then(function(sn){ if(sn.exists){ var d=sn.data().d; if(d){ state.images[id]=d; idbSet(id,d).catch(function(){}); } } }).catch(function(){}); }));
     }
+  }).then(function(){
+    if(cloudReady && fbUser){
+      var pk="marina-imgpushed-"+fbUser.uid, pushed={};
+      try{ pushed=JSON.parse(localStorage.getItem(pk)||"{}"); }catch(e){}
+      var chg=false;
+      Object.keys(state.images).forEach(function(id){ if(state.images[id] && !pushed[id]){ cloudPutImage(id,state.images[id]); pushed[id]=1; chg=true; } });
+      if(chg){ try{ localStorage.setItem(pk,JSON.stringify(pushed)); }catch(e){} }
+    }
   }).then(function(){ render(); });
 }
 function loadFromCloud(){
   return withTo(colGoals().get(),20000).then(function(snap){
     if(!snap.empty){
-      var arr=snap.docs.map(function(d){ return d.data(); });
+      var cloudJson={};
+      var arr=snap.docs.map(function(d){ var v=d.data(); if(v&&v.id)cloudJson[v.id]=JSON.stringify(v); return v; });
       return withTo(metaDoc().get(),15000).then(function(ms){
         var meta=ms.exists?ms.data():{};
-        if(meta.goalOrder){ var pos={}; meta.goalOrder.forEach(function(id,i){ pos[id]=i; }); arr.sort(function(a,b){ return (pos[a.id]!=null?pos[a.id]:999)-(pos[b.id]!=null?pos[b.id]:999); }); }
-        state.goals=arr;
+        var localMap={}; (state.goals||[]).forEach(function(g){ if(g&&g.id)localMap[g.id]=g; });
+        var merged=arr.map(function(cg){ var lg=localMap[cg.id]; return (lg&&(lg.updatedAt||0)>(cg.updatedAt||0))?lg:cg; });
+        Object.keys(localMap).forEach(function(id){ if(!cloudJson[id]) merged.push(localMap[id]); });
+        if(meta.goalOrder){ var pos={}; meta.goalOrder.forEach(function(id,i){ pos[id]=i; }); merged.sort(function(a,b){ return (pos[a.id]!=null?pos[a.id]:999)-(pos[b.id]!=null?pos[b.id]:999); }); }
+        state.goals=merged;
+        state._cloudGoals=cloudJson;
         if(meta.cats)state.cats=meta.cats; if(meta.sort)state.sort=meta.sort;
         state.onlyActive=!!meta.onlyActive;
         if(meta.theme){ state.theme=meta.theme; } if(meta.listMode)state.listMode=meta.listMode; state.useShort=!!meta.useShort;
-        return withTo(colDays().get(),15000).then(function(ds){ var de={}; ds.docs.forEach(function(d){ de[d.id]=d.data(); }); state.dayExtra=de; });
+        return withTo(colDays().get(),15000).then(function(ds){
+          var de={}, cloudDays={};
+          ds.docs.forEach(function(d){ de[d.id]=d.data(); cloudDays[d.id]=JSON.stringify(de[d.id]); });
+          Object.keys(state.dayExtra||{}).forEach(function(k){ var l=state.dayExtra[k]; if(!l)return; var c=de[k]; if(!c || (l.u||0)>((c.u)||0)) de[k]=l; });
+          state.dayExtra=de;
+          state._cloudDays=cloudDays;
+        });
       }).then(function(){
         normalizeGoals(); applyTheme();
         try{ localStorage.setItem(KEY,JSON.stringify(state.goals)); localStorage.setItem(KEY_CATS,JSON.stringify(state.cats)); localStorage.setItem("marina-dayextra-v1",JSON.stringify(state.dayExtra)); localStorage.setItem("marina-theme",state.theme); }catch(e){}
-        state.goals.forEach(function(g){ lastSync.goals[g.id]=JSON.stringify(g); });
-        Object.keys(state.dayExtra).forEach(function(k){ lastSync.days[k]=JSON.stringify(state.dayExtra[k]); });
+        var cj=state._cloudGoals||{}, cd=state._cloudDays||{}, dirty=false;
+        state.goals.forEach(function(g){ lastSync.goals[g.id]=cj[g.id]||""; if(cj[g.id]!==JSON.stringify(g))dirty=true; });
+        Object.keys(state.dayExtra).forEach(function(k){ lastSync.days[k]=cd[k]||""; if(cd[k]!==JSON.stringify(state.dayExtra[k]))dirty=true; });
         lastSync.meta=JSON.stringify(metaObj());
+        delete state._cloudGoals; delete state._cloudDays;
+        if(dirty && cloudReady){ pushCloud("goals"); pushCloud("days"); }
         return true;
       });
     }
@@ -1658,6 +1691,11 @@ function LoginView(){
       render();
       hydrateImages();
     }).catch(function(){ render(); hydrateImages(); });
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="visible" && cloudReady && fbUser){
+      loadFromCloud().then(function(){ render(); hydrateImages(); }).catch(function(){});
+    }
   });
   if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("./sw.js"); }catch(e){} }
 })();
