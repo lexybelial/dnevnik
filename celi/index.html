@@ -39,6 +39,13 @@
   .kindDot.daily{ background:rgba(242,166,90,.22); color:var(--accent); font-size:15px; }
   .kindDot.count{ background:var(--card2); border:1px solid var(--line); color:var(--text); padding:0 6px; }
   .kindChip{ display:inline-flex; align-items:center; background:var(--card2); border:1px solid var(--line); border-radius:20px; color:var(--sub); font-size:12.5px; padding:5px 11px; }
+  .viewDoc{ margin:6px 20px 4px; background:var(--card2); border:1px solid var(--line); border-radius:16px; padding:18px 16px; }
+  .viewPill{ display:inline-flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--accent); color:var(--accent); font-weight:700; font-size:13.5px; padding:5px 13px; border-radius:13px; margin:16px 0 8px; cursor:pointer; }
+  .viewPill.first{ margin-top:0; }
+  .viewText{ font-size:15px; line-height:1.55; white-space:pre-wrap; color:var(--text); }
+  .viewQ{ font-size:13px; color:var(--sub); margin:10px 0 3px; line-height:1.35; }
+  .viewPhotos{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+  .viewPhotos img{ width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; cursor:pointer; display:block; }
   .periodBar{ position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:460px; display:flex; background:var(--card); border-top:1px solid var(--line); z-index:30; padding-bottom:env(safe-area-inset-bottom); }
   .periodTab{ flex:1; background:transparent; border:none; padding:13px 0 12px; font-size:14px; color:var(--sub); cursor:pointer; }
   .periodTab.on{ color:var(--accent); font-weight:700; }
@@ -200,6 +207,7 @@
     .app.wide .reportWrap{ display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start; padding:0 20px; }
     .app.wide .reportWrap .reportGoal{ margin:0; }
     .app.wide .periodBar{ max-width:1280px; }
+    .app.wide .viewDoc{ max-width:720px; margin-left:auto; margin-right:auto; }
     .app.wide .fab{ left:auto; right:34px; transform:none; }
     .menuCatcher.wide .menu{ right:max(14px, calc(50vw - 626px)); }
   }
@@ -1258,12 +1266,12 @@ function reportIsCurrent(gran,key){ var t=todayKey(); if(gran==="day")return key
 function ReportView(){
   if(!state.reportDay) state.reportDay=todayKey();
   if(!state.reportGran) state.reportGran="day";
-  var gran=state.reportGran, key=state.reportDay, cur=reportIsCurrent(gran,key);
+  var gran=state.reportGran, key=state.reportDay, cur=reportIsCurrent(gran,key), edit=!!state.reportEdit;
   var app=h("div",{class:"app wide"});
   app.appendChild(h("div",{class:"header"},
     h("button",{class:"iconBtn", onClick:function(){ state.view="list"; render(); }}, icon("chevronLeft",26,"var(--text)")),
     h("span",{style:{color:"var(--text)",fontWeight:"600"}},"Отчёт по всем целям"),
-    h("div",{style:{width:"26px"}})));
+    h("button",{class:"iconBtn", style:edit?{background:"var(--accent)",borderRadius:"10px",padding:"6px"}:{padding:"6px"}, onClick:function(){ state.reportEdit=!edit; render(); }}, icon("pencil",20,edit?"var(--onAccent)":"var(--sub)"))));
   var scroll=h("div",{class:"scroll"});
   var bar=h("div",{class:"periodBar"});
   [["day","День"],["week","Неделя"],["month","Месяц"],["year","Год"]].forEach(function(x){ bar.appendChild(h("button",{class:"periodTab"+(gran===x[0]?" on":""), onClick:function(){ state.reportGran=x[0]; render(); }}, x[1])); });
@@ -1275,15 +1283,28 @@ function ReportView(){
   if(!cur) scroll.appendChild(h("div",{style:{padding:"0 20px 8px"}}, h("button",{style:{width:"100%",display:"flex",gap:"6px",alignItems:"center",justifyContent:"center",background:"var(--card2)",border:"1px solid var(--line)",borderRadius:"12px",color:"var(--accent)",padding:"10px",fontSize:"14px",cursor:"pointer"}, onClick:function(){ state.reportDay=todayKey(); render(); }}, icon("clock",15,"var(--accent)"), (gran==="day"?"К сегодня":(gran==="week"?"К этой неделе":(gran==="year"?"К этому году":"К этому месяцу"))))));
   var blocks=[];
   state.goals.forEach(function(g){ var lines=periodReport(g,(gran==="year")?"range":gran,(gran==="year")?yearBounds(key):key); var notes=(gran==="day")?notesOnDay(g,key):[]; if(!lines.length && !notes.length) return; blocks.push({g:g,lines:lines,notes:notes}); });
-  if(gran==="day"){ var dh=[]; state.goals.forEach(function(g){ if((g.status||"active")!=="active")return; (g.stages||[]).forEach(function(st){ if(stageKind(st)==="daily" && !st.hidden) dh.push(st); }); }); var doneD=dh.filter(function(st){ return !!(st.log&&st.log[key]); }).length, pctD=dh.length?Math.round(doneD/dh.length*100):0; scroll.appendChild(h("div",{style:{margin:"2px 20px 8px"}}, h("div",{class:"trkBadge", style:{cursor:"pointer"}, onClick:function(){ state.view="tracker"; render(); }}, h("div",{class:"trkPct"}, pctD+"%"), h("div",null, h("div",{style:{fontWeight:"700",fontSize:"14px"}},"Ежедневные за день ›"), h("div",{style:{color:"var(--sub)",fontSize:"12.5px"}}, doneD+" из "+dh.length))))); }
-  scroll.appendChild(h("div",{style:{padding:"2px 20px 6px",color:"var(--sub)",fontSize:"14px"}}, "Целей с движением: "+blocks.length));
-  if(!blocks.length){ scroll.appendChild(h("div",{class:"empty",style:{marginTop:"10px"}}, h("p",null,"В этот период движения по целям не было."))); }
+  if(gran==="day" && edit){ var dh=[]; state.goals.forEach(function(g){ if((g.status||"active")!=="active")return; (g.stages||[]).forEach(function(st){ if(stageKind(st)==="daily" && !st.hidden) dh.push(st); }); }); var doneD=dh.filter(function(st){ return !!(st.log&&st.log[key]); }).length, pctD=dh.length?Math.round(doneD/dh.length*100):0; scroll.appendChild(h("div",{style:{margin:"2px 20px 8px"}}, h("div",{class:"trkBadge", style:{cursor:"pointer"}, onClick:function(){ state.view="tracker"; render(); }}, h("div",{class:"trkPct"}, pctD+"%"), h("div",null, h("div",{style:{fontWeight:"700",fontSize:"14px"}},"Ежедневные за день ›"), h("div",{style:{color:"var(--sub)",fontSize:"12.5px"}}, doneD+" из "+dh.length))))); }
+  if(edit) scroll.appendChild(h("div",{style:{padding:"2px 20px 6px",color:"var(--sub)",fontSize:"14px"}}, "Целей с движением: "+blocks.length));
+  if(!blocks.length){
+    scroll.appendChild(h("div",{class:"empty",style:{marginTop:"10px"}}, h("p",null,"В этот период движения по целям не было.")));
+    if(gran==="day" && !edit) scroll.appendChild(h("div",{style:{padding:"0 20px"}}, h("button",{class:"editBtn",style:{marginTop:"0"}, onClick:function(){ state.reportEdit=true; render(); }}, icon("pencil",16,"var(--accent)"), h("span",null,"Заполнить этот день"))));
+  }
+  var viewDoc=h("div",{class:"viewDoc"}), viewAny=false;
+  function pill(txt,onClick,first){ return h("button",{class:"viewPill"+(first?" first":""), onClick:onClick||null}, txt); }
+  if(!edit){
+    blocks.forEach(function(b,bi){
+      viewDoc.appendChild(h("div",null, pill((b.g.emoji?b.g.emoji+" ":"")+reportTitle(b.g), (function(gg){ return function(){ state.detailReturn="report"; state.activeId=gg.id; state.tab="desc"; state.view="detail"; render(); }; })(b.g), bi===0)));
+      var parts=b.lines.slice(); b.notes.forEach(function(n){ if(n.text)parts.push(n.text); });
+      viewAny=true;
+      viewDoc.appendChild(h("div",{class:"viewText"}, parts.join("\n")));
+    });
+  }
   var reportWrap=h("div",{class:"reportWrap"});
-  blocks.forEach(function(b){
+  if(edit) blocks.forEach(function(b){
     var name=reportTitle(b.g);
     var card=h("div",{class:"reportGoal"});
     card.appendChild(h("div",{class:"reportGoalHead", style:{cursor:"pointer"}, onClick:(function(gg){ return function(){ state.detailReturn="report"; state.activeId=gg.id; state.tab="desc"; state.view="detail"; render(); }; })(b.g)}, coverEl(b.g,34,34,9,17), h("div",{style:{fontWeight:"700",fontSize:"15.5px",lineHeight:"1.25"}}, name), icon("chevronRight",16,"var(--sub)")));
-    if(gran==="day"){
+    if(gran==="day" && edit){
       var rows=dayReportRows(b.g,key);
       if(rows.length){ rows.forEach(function(r){ (function(r){
         var line;
@@ -1297,11 +1318,11 @@ function ReportView(){
       b.lines.forEach(function(l){ card.appendChild(h("div",{class:"reportLine"}, l)); });
     }
     b.notes.forEach(function(n){ if(n.text) card.appendChild(h("div",{class:"reportNote tapNote", onClick:(function(gg){ return function(){ state.detailReturn="report"; state.activeId=gg.id; state.tab="notes"; state.view="detail"; render(); }; })(b.g)}, n.text)); });
-    if(gran==="day") card.appendChild(h("button",{class:"linkBtn",style:{marginTop:"8px",fontSize:"14px"}, onClick:(function(gg){ return function(){ openGoalDay(gg.id,key); }; })(b.g)},"✎ Запись за этот день"));
+    if(gran==="day" && edit) card.appendChild(h("button",{class:"linkBtn",style:{marginTop:"8px",fontSize:"14px"}, onClick:(function(gg){ return function(){ openGoalDay(gg.id,key); }; })(b.g)},"✎ Запись за этот день"));
     reportWrap.appendChild(card);
   });
-  scroll.appendChild(reportWrap);
-  if(gran==="day"){
+  if(edit){ scroll.appendChild(reportWrap); } else { scroll.appendChild(viewDoc); setTimeout(function(){ if(!viewDoc.childNodes.length) viewDoc.style.display="none"; },0); }
+  if(gran==="day" && edit){
     var inBlocks={}; blocks.forEach(function(b){ inBlocks[b.g.id]=1; });
     var rest=state.goals.filter(function(g){ return (g.status||"active")==="active" && !inBlocks[g.id]; });
     if(rest.length){
@@ -1316,38 +1337,59 @@ function ReportView(){
   }
   if(gran!=="day"){
     var pk=periodExtraKey(gran,key), pex=state.dayExtra[pk]||{};
-    var pit=h("textarea",{class:"inp",rows:3,placeholder:(gran==="week"?"Главное за неделю, выводы, чем горжусь":(gran==="month"?"Главное за месяц, выводы":"Главное за год, выводы")),style:{overflow:"hidden"}}); pit.value=pex.summary||"";
-    pit.addEventListener("input",function(){ setDayExtra(pk,"summary",pit.value); autoGrow(pit); });
-    scroll.appendChild(h("div",{class:"docLabel"},(gran==="week"?"Итоги недели":(gran==="month"?"Итоги месяца":"Итоги года"))));
-    scroll.appendChild(h("div",{style:{margin:"0 20px"}}, pit));
-    setTimeout(function(){ autoGrow(pit); },0);
+    if(edit) scroll.appendChild(h("div",{class:"docLabel"},(gran==="week"?"Итоги недели":(gran==="month"?"Итоги месяца":"Итоги года"))));
+    if(edit){
+      var pit=h("textarea",{class:"inp",rows:3,placeholder:(gran==="week"?"Главное за неделю, выводы, чем горжусь":(gran==="month"?"Главное за месяц, выводы":"Главное за год, выводы")),style:{overflow:"hidden"}}); pit.value=pex.summary||"";
+      pit.addEventListener("input",function(){ setDayExtra(pk,"summary",pit.value); autoGrow(pit); });
+      scroll.appendChild(h("div",{style:{margin:"0 20px"}}, pit));
+      setTimeout(function(){ autoGrow(pit); },0);
+    } else if(pex.summary&&pex.summary.trim()){
+      viewDoc.appendChild(h("div",null, pill("Итоги",null,!viewAny))); viewAny=true;
+      viewDoc.appendChild(h("div",{class:"viewText"}, pex.summary.trim()));
+    } else {
+      viewDoc.appendChild(h("div",{style:{color:"var(--sub)",fontSize:"13.5px",marginTop:viewAny?"12px":"0"}},"Итоги не заполнены — нажми ✏️ вверху."));
+    }
   }
   if(gran==="day"){
     var ex=state.dayExtra[key]||{};
-    var oc=h("textarea",{class:"inp",rows:2,placeholder:"Что ещё сделала сегодня (не по целям)",style:{overflow:"hidden"}}); oc.value=ex.other||""; oc.addEventListener("input",function(){ setDayExtra(key,"other",oc.value); autoGrow(oc); });
-    var rf=h("textarea",{class:"inp",rows:2,placeholder:"Мысли, выводы по дню",style:{overflow:"hidden"}}); rf.value=ex.reflection||""; rf.addEventListener("input",function(){ setDayExtra(key,"reflection",rf.value); autoGrow(rf); });
-    scroll.appendChild(h("div",{class:"docLabel"},"Другое")); scroll.appendChild(h("div",{style:{margin:"0 20px"}}, oc));
-    scroll.appendChild(h("div",{class:"docLabel"},"Рефлексия")); scroll.appendChild(h("div",{style:{margin:"0 20px"}}, rf));
-    setTimeout(function(){ autoGrow(oc); autoGrow(rf); },0);
     var QDEFS=[["q1","Что хорошо я сегодня сделал(а) для себя и для других людей?"],["q2","Мог(ла) ли я сегодня своими мыслями, словами или поступками причинить кому-то боль, ранить кого-то?"],["q3","Как я исправлю это завтра?"]];
-    var qFilled=QDEFS.some(function(q){ return ex[q[0]]&&String(ex[q[0]]).trim(); });
-    var qOpen=(state.qOpen!=null)?state.qOpen:qFilled;
-    scroll.appendChild(h("div",{style:{padding:"12px 20px 0"}}, h("button",{class:"linkBtn",style:{fontSize:"14px"}, onClick:function(){ state.qOpen=!qOpen; render(); }}, (qOpen?"– ":"+ ")+"Вопросы дня"+(qFilled&&!qOpen?" · заполнены":""))));
-    if(qOpen){ QDEFS.forEach(function(q){
-      var ta=h("textarea",{class:"inp",rows:2,placeholder:"…",style:{overflow:"hidden"}}); ta.value=ex[q[0]]||"";
-      ta.addEventListener("input",(function(f,el){ return function(){ setDayExtra(key,f,el.value); autoGrow(el); }; })(q[0],ta));
-      scroll.appendChild(h("div",{class:"docLabel",style:{padding:"10px 20px 6px",fontWeight:"500"}}, q[1]));
-      scroll.appendChild(h("div",{style:{margin:"0 20px"}}, ta));
-      setTimeout((function(el){ return function(){ autoGrow(el); }; })(ta),0);
-    }); }
-    var dph=(state.dayExtra[key]&&state.dayExtra[key].photos)||[];
-    scroll.appendChild(h("div",{class:"docLabel"},"Фото ко дню (без привязки к цели)"));
-    if(dph.length){ var dpw=h("div",{style:{display:"flex",flexWrap:"wrap",gap:"8px",padding:"0 20px 8px"}}); dph.forEach(function(pid,idx){ if(state.images[pid]){ dpw.appendChild(h("div",{style:{position:"relative"}}, h("img",{src:state.images[pid],style:{width:"84px",height:"84px",objectFit:"cover",borderRadius:"10px",display:"block"}}), h("button",{style:{position:"absolute",top:"-6px",right:"-6px",background:"var(--danger)",color:"#fff",border:"none",borderRadius:"50%",width:"22px",height:"22px",lineHeight:"20px",cursor:"pointer",fontSize:"15px"}, onClick:(function(idx){return function(){ removeDayPhoto(key,idx); };})(idx)},"×"))); } }); scroll.appendChild(dpw); }
-    scroll.appendChild(h("div",{style:{padding:"0 20px 4px"}}, photoButton("Прикрепить фото ко дню", function(id){ addDayPhoto(key,id); })));
+    if(edit){
+      var oc=h("textarea",{class:"inp",rows:2,placeholder:"Что ещё сделала сегодня (не по целям)",style:{overflow:"hidden"}}); oc.value=ex.other||""; oc.addEventListener("input",function(){ setDayExtra(key,"other",oc.value); autoGrow(oc); });
+      var rf=h("textarea",{class:"inp",rows:2,placeholder:"Мысли, выводы по дню",style:{overflow:"hidden"}}); rf.value=ex.reflection||""; rf.addEventListener("input",function(){ setDayExtra(key,"reflection",rf.value); autoGrow(rf); });
+      scroll.appendChild(h("div",{class:"docLabel"},"Другое")); scroll.appendChild(h("div",{style:{margin:"0 20px"}}, oc));
+      scroll.appendChild(h("div",{class:"docLabel"},"Рефлексия")); scroll.appendChild(h("div",{style:{margin:"0 20px"}}, rf));
+      setTimeout(function(){ autoGrow(oc); autoGrow(rf); },0);
+      var qFilled=QDEFS.some(function(q){ return ex[q[0]]&&String(ex[q[0]]).trim(); });
+      var qOpen=(state.qOpen!=null)?state.qOpen:qFilled;
+      scroll.appendChild(h("div",{style:{padding:"12px 20px 0"}}, h("button",{class:"linkBtn",style:{fontSize:"14px"}, onClick:function(){ state.qOpen=!qOpen; render(); }}, (qOpen?"– ":"+ ")+"Вопросы дня"+(qFilled&&!qOpen?" · заполнены":""))));
+      if(qOpen){ QDEFS.forEach(function(q){
+        var ta=h("textarea",{class:"inp",rows:2,placeholder:"…",style:{overflow:"hidden"}}); ta.value=ex[q[0]]||"";
+        ta.addEventListener("input",(function(f,el){ return function(){ setDayExtra(key,f,el.value); autoGrow(el); }; })(q[0],ta));
+        scroll.appendChild(h("div",{class:"docLabel",style:{padding:"10px 20px 6px",fontWeight:"500"}}, q[1]));
+        scroll.appendChild(h("div",{style:{margin:"0 20px"}}, ta));
+        setTimeout((function(el){ return function(){ autoGrow(el); }; })(ta),0);
+      }); }
+      var dph=(state.dayExtra[key]&&state.dayExtra[key].photos)||[];
+      scroll.appendChild(h("div",{class:"docLabel"},"Фото ко дню (без привязки к цели)"));
+      if(dph.length){ var dpw=h("div",{style:{display:"flex",flexWrap:"wrap",gap:"8px",padding:"0 20px 8px"}}); dph.forEach(function(pid,idx){ if(state.images[pid]){ dpw.appendChild(h("div",{style:{position:"relative"}}, h("img",{src:state.images[pid],style:{width:"84px",height:"84px",objectFit:"cover",borderRadius:"10px",display:"block"}}), h("button",{style:{position:"absolute",top:"-6px",right:"-6px",background:"var(--danger)",color:"#fff",border:"none",borderRadius:"50%",width:"22px",height:"22px",lineHeight:"20px",cursor:"pointer",fontSize:"15px"}, onClick:(function(idx){return function(){ removeDayPhoto(key,idx); };})(idx)},"×"))); } }); scroll.appendChild(dpw); }
+      scroll.appendChild(h("div",{style:{padding:"0 20px 4px"}}, photoButton("Прикрепить фото ко дню", function(id){ addDayPhoto(key,id); })));
+    } else {
+      if(ex.other&&ex.other.trim()){ viewDoc.appendChild(h("div",null, pill("Другое",null,!viewAny))); viewAny=true; viewDoc.appendChild(h("div",{class:"viewText"}, ex.other.trim())); }
+      if(ex.reflection&&ex.reflection.trim()){ viewDoc.appendChild(h("div",null, pill("Рефлексия",null,!viewAny))); viewAny=true; viewDoc.appendChild(h("div",{class:"viewText"}, ex.reflection.trim())); }
+      var qVals=QDEFS.filter(function(q){ return ex[q[0]]&&String(ex[q[0]]).trim(); });
+      if(qVals.length){ viewDoc.appendChild(h("div",null, pill("Вопросы дня",null,!viewAny))); viewAny=true;
+        qVals.forEach(function(q){ viewDoc.appendChild(h("div",{class:"viewQ"}, q[1])); viewDoc.appendChild(h("div",{class:"viewText"}, String(ex[q[0]]).trim())); }); }
+    }
     var photos=dayPhotoIds(key).map(function(pid){ return state.images[pid]; });
-    if(photos.length){ scroll.appendChild(h("div",{class:"docLabel"},"Все фото за день (тап — отправить одно)")); var pw=h("div",{style:{display:"flex",flexWrap:"wrap",gap:"8px",padding:"0 20px"}}); photos.forEach(function(src){ pw.appendChild(h("img",{src:src, style:{width:"96px",height:"96px",objectFit:"cover",borderRadius:"10px",cursor:"pointer"}, onClick:(function(src){ return function(){ sharePhoto(src); }; })(src)})); }); scroll.appendChild(pw); }
+    if(photos.length && !edit){
+      viewDoc.appendChild(h("div",null, pill("Фото",null,!viewAny))); viewAny=true;
+      var vgrid=h("div",{class:"viewPhotos"});
+      photos.forEach(function(src){ vgrid.appendChild(h("img",{src:src, onClick:(function(src){ return function(){ sharePhoto(src); }; })(src)})); });
+      viewDoc.appendChild(vgrid);
+    }
+    if(photos.length && edit){ scroll.appendChild(h("div",{class:"docLabel"},"Все фото за день (тап — отправить одно)")); var pw=h("div",{style:{display:"flex",flexWrap:"wrap",gap:"8px",padding:"0 20px"}}); photos.forEach(function(src){ pw.appendChild(h("img",{src:src, style:{width:"96px",height:"96px",objectFit:"cover",borderRadius:"10px",cursor:"pointer"}, onClick:(function(src){ return function(){ sharePhoto(src); }; })(src)})); }); scroll.appendChild(pw); }
   }
-  if(gran==="day"){ var svMsg=h("span",null,"Сохранить отчёты за день в дневники целей"); scroll.appendChild(h("div",{style:{padding:"10px 20px 0"}}, h("button",{class:"editBtn",style:{width:"100%",marginTop:"0"}, onClick:function(){ var n=saveAllDayReports(key); svMsg.textContent="Сохранено в "+n+" "+plural(n,"цель","цели","целей")+" ✔"; }}, icon("check",16,"var(--accent)"), svMsg))); }
+  if(gran==="day" && edit){ var svMsg=h("span",null,"Сохранить отчёты за день в дневники целей"); scroll.appendChild(h("div",{style:{padding:"10px 20px 0"}}, h("button",{class:"editBtn",style:{width:"100%",marginTop:"0"}, onClick:function(){ var n=saveAllDayReports(key); svMsg.textContent="Сохранено в "+n+" "+plural(n,"цель","цели","целей")+" ✔"; }}, icon("check",16,"var(--accent)"), svMsg))); }
   var okMsg=h("span",null,gran==="day"?"Поделиться в телеграм (с фото)":"Поделиться в телеграм");
   var cpMsg=h("span",null,"Скопировать текст отчёта");
   scroll.appendChild(h("div",{style:{padding:"14px 20px 4px"}}, h("button",{class:"editBtn",style:{width:"100%"}, onClick:function(){ shareDayReport(gran,key,blocks,okMsg); }}, icon("plus",16,"var(--accent)"), okMsg)));
@@ -1358,7 +1400,6 @@ function ReportView(){
   app.appendChild(scroll);
   return app;
 }
-
 function openStageComment(g,s,key){ state.cmtDraft={gid:g.id,sid:s.id,key:key,text:stageComment(s,key),stage:s.text}; state.modal="stagecomment"; render(); }
 function StageCommentModal(){
   var d=state.cmtDraft;
