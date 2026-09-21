@@ -473,6 +473,7 @@ function render(){
   if(state.modal==="import") root.appendChild(ImportModal());
   if(state.modal==="stage") root.appendChild(StageModal());
   if(state.modal==="numpop") root.appendChild(NumPopModal());
+  if(state.modal==="goalday") root.appendChild(GoalDayModal());
   if(state.modal==="stagecomment") root.appendChild(StageCommentModal());
   if(state.modal==="aiexport") root.appendChild(AiExportModal());
   if(state.menu) root.appendChild(MenuOverlay());
@@ -1144,7 +1145,7 @@ function StatsView(){
 }
 
 /* ---------- ЭКСПОРТ / ИМПОРТ ---------- */
-function buildExport(){ return JSON.stringify({ v:1, goals:state.goals, cats:state.cats, sort:state.sort, onlyActive:state.onlyActive, theme:state.theme, dayExtra:state.dayExtra, images:state.images }); }
+function buildExport(){ return JSON.stringify({ v:1, goals:state.goals, cats:state.cats, sort:state.sort, onlyActive:state.onlyActive, theme:state.theme, listMode:state.listMode, useShort:state.useShort, dayExtra:state.dayExtra, images:state.images }); }
 function copyText(ta){ try{ ta.focus(); ta.select(); }catch(e){} try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(ta.value); } else { document.execCommand("copy"); } }catch(e){} }
 function downloadText(name,txt){ try{ var b=new Blob([txt],{type:"application/json"}); var u=URL.createObjectURL(b); var a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){ URL.revokeObjectURL(u); },1000); return true; }catch(e){ return false; } }
 function shareExport(data,msg){
@@ -1195,7 +1196,7 @@ function ImportModal(){
 function doImport(txt, msg){
   var obj; try{ obj=JSON.parse(txt); }catch(e){ if(msg)msg.textContent="Не удалось прочитать текст. Проверь, что скопировал целиком."; return; }
   if(!obj || !obj.goals){ if(msg)msg.textContent="В тексте нет данных целей."; return; }
-  state.goals=obj.goals||[]; if(obj.cats)state.cats=obj.cats; if(obj.sort)state.sort=obj.sort; state.onlyActive=!!obj.onlyActive; state.images=obj.images||{}; if(obj.dayExtra){ state.dayExtra=obj.dayExtra; saveDayExtra(); } if(obj.theme){ state.theme=obj.theme; try{ localStorage.setItem("marina-theme",state.theme); }catch(e){} applyTheme(); }
+  state.goals=obj.goals||[]; if(obj.cats)state.cats=obj.cats; if(obj.sort)state.sort=obj.sort; state.onlyActive=!!obj.onlyActive; if(obj.listMode)state.listMode=obj.listMode; if(obj.useShort!=null)state.useShort=!!obj.useShort; state.images=obj.images||{}; if(obj.dayExtra){ state.dayExtra=obj.dayExtra; saveDayExtra(); } if(obj.theme){ state.theme=obj.theme; try{ localStorage.setItem("marina-theme",state.theme); }catch(e){} applyTheme(); }
   normalizeGoals();
   var _ts=Date.now(); state.goals.forEach(function(g){ g.updatedAt=_ts; }); Object.keys(state.dayExtra||{}).forEach(function(k){ if(state.dayExtra[k])state.dayExtra[k].u=_ts; });
   saveGoals(); saveCats();
@@ -1296,9 +1297,23 @@ function ReportView(){
       b.lines.forEach(function(l){ card.appendChild(h("div",{class:"reportLine"}, l)); });
     }
     b.notes.forEach(function(n){ if(n.text) card.appendChild(h("div",{class:"reportNote tapNote", onClick:(function(gg){ return function(){ state.detailReturn="report"; state.activeId=gg.id; state.tab="notes"; state.view="detail"; render(); }; })(b.g)}, n.text)); });
+    if(gran==="day") card.appendChild(h("button",{class:"linkBtn",style:{marginTop:"8px",fontSize:"14px"}, onClick:(function(gg){ return function(){ openGoalDay(gg.id,key); }; })(b.g)},"✎ Запись за этот день"));
     reportWrap.appendChild(card);
   });
   scroll.appendChild(reportWrap);
+  if(gran==="day"){
+    var inBlocks={}; blocks.forEach(function(b){ inBlocks[b.g.id]=1; });
+    var rest=state.goals.filter(function(g){ return (g.status||"active")==="active" && !inBlocks[g.id]; });
+    if(rest.length){
+      scroll.appendChild(h("div",{style:{padding:"14px 20px 4px",color:"var(--sub)",fontSize:"13px"}},"Дополнить день по другим целям — нажми на цель:"));
+      var restWrap=h("div",{class:"reportWrap"});
+      rest.forEach(function(g){
+        restWrap.appendChild(h("div",{class:"reportGoal", style:{cursor:"pointer",opacity:".85"}, onClick:(function(gg){ return function(){ openGoalDay(gg.id,key); }; })(g)},
+          h("div",{class:"reportGoalHead"}, coverEl(g,34,34,9,17), h("div",{style:{fontWeight:"600",fontSize:"15px",lineHeight:"1.25",flex:"1"}}, reportTitle(g)), h("span",{style:{color:"var(--accent)",fontSize:"14px"}},"✎"))));
+      });
+      scroll.appendChild(restWrap);
+    }
+  }
   if(gran!=="day"){
     var pk=periodExtraKey(gran,key), pex=state.dayExtra[pk]||{};
     var pit=h("textarea",{class:"inp",rows:3,placeholder:(gran==="week"?"Главное за неделю, выводы, чем горжусь":(gran==="month"?"Главное за месяц, выводы":"Главное за год, выводы")),style:{overflow:"hidden"}}); pit.value=pex.summary||"";
@@ -1479,6 +1494,45 @@ function setDayCountValue(g,id,key,val){ var cg=goalById(g.id)||g; updateGoal(g.
 function syncReportNote(gid,key){ var g=goalById(gid); if(!g)return; var notes=(g.notes||[]); var idx=-1; for(var i=0;i<notes.length;i++){ if(notes[i].reportKey===key){ idx=i; break; } } if(idx<0)return; var n=notes[idx]; if(!dayReport(g,key).length && !(n.text&&n.text.trim()) && !notePhotos(n).length){ var arr=notes.slice(); arr.splice(idx,1); updateGoal(gid,{notes:arr}); } }
 function dayReportRows(g,key){ var rows=[], positive=false; (g.stages||[]).forEach(function(s){ var k=stageKind(s); if(k==="daily"){ var on=!!(s.log&&s.log[key]); if(on)positive=true; rows.push({s:s,k:"daily",on:on}); } else if(k==="count"){ var v=(s.log&&s.log[key]&&s.log[key]!==true)?(+s.log[key]||0):0; if(v>0){ positive=true; rows.push({s:s,k:"count",v:v}); } } }); var skipped=g.skips&&g.skips[key]; if(!positive && !skipped) return []; return rows; }
 function openNumPop(g,s,key){ var cur=(s.log&&s.log[key]&&s.log[key]!==true)?(+s.log[key]||0):0; state.numDraft={gid:g.id,sid:s.id,key:key,text:s.text,val:cur+""}; state.modal="numpop"; render(); }
+function openGoalDay(gid,key){ state.gdDraft={gid:gid,key:key}; state.modal="goalday"; render(); }
+function GoalDayModal(){
+  var d=state.gdDraft, g=goalById(d.gid), key=d.key;
+  if(!g){ state.modal=null; return h("div",null); }
+  var body=h("div",null);
+  body.appendChild(h("div",{style:{color:"var(--sub)",fontSize:"13px",marginBottom:"10px",textTransform:"capitalize"}}, humanDate(key)));
+  var daily=(g.stages||[]).filter(function(s){return stageKind(s)==="daily";});
+  var counts=(g.stages||[]).filter(function(s){return stageKind(s)==="count";});
+  if(daily.length||counts.length){
+    body.appendChild(h("div",{class:"docLabel",style:{padding:"0 0 6px"}},"Отчёт"));
+    daily.forEach(function(s){ var on=!!(s.log&&s.log[key]);
+      body.appendChild(h("div",{style:{display:"flex",alignItems:"center",gap:"12px",padding:"7px 0"}},
+        h("button",{class:"check"+(on?" on":""), style:{width:"26px",height:"26px"}, onClick:function(){ toggleDaily(g,s.id,key); }}, on?icon("check",14,"var(--onAccent)",3):null),
+        h("span",{style:{flex:"1",fontSize:"15px"}}, s.text)));
+    });
+    counts.forEach(function(s){ var v=(s.log&&s.log[key]&&s.log[key]!==true)?(+s.log[key]||0):0;
+      body.appendChild(h("div",{style:{display:"flex",alignItems:"center",gap:"12px",padding:"7px 0"}},
+        h("div",{class:"counter"},
+          h("button",{class:"cbtn", onClick:function(){ stepDayCount(g,s.id,key,-1); }},"−"),
+          h("span",{class:"cval"},"+"+v),
+          h("button",{class:"cbtn", onClick:function(){ stepDayCount(g,s.id,key,1); }},"+")),
+        h("span",{style:{flex:"1",fontSize:"15px"}}, s.text+(s.target?(" · "+countInPeriod(s,key)+"/"+s.target):""))));
+    });
+  }
+  var onceDone=(g.stages||[]).filter(function(s){ return stageKind(s)==="once" && s.done && s.doneDate===key; });
+  onceDone.forEach(function(s){ body.appendChild(h("div",{class:"reportLine"},"✅ "+s.text)); });
+  body.appendChild(h("div",{class:"docLabel",style:{padding:"12px 0 6px"}},"Запись за этот день"));
+  var dn=dayNoteOf(g,key);
+  var ta=h("textarea",{class:"inp",rows:4,placeholder:"Что сделала, что поняла — попадёт в дневник цели",style:{overflow:"hidden"}}); ta.value=(dn&&dn.text)||"";
+  ta.addEventListener("input",function(){ setDayNoteText(g.id,key,ta.value); autoGrow(ta); });
+  body.appendChild(ta);
+  setTimeout(function(){ autoGrow(ta); },0);
+  var act=h("div",{class:"mActions"});
+  act.appendChild(h("button",{class:"linkBtn", onClick:function(){ state.modal=null; state.gdDraft=null; state.detailReturn="report"; state.activeId=g.id; state.tab="notes"; state.view="detail"; render(); }},"Открыть цель ›"));
+  act.appendChild(h("div",{style:{flex:"1"}}));
+  act.appendChild(h("button",{class:"primaryBtn", onClick:function(){ state.modal=null; state.gdDraft=null; render(); }},"Готово"));
+  body.appendChild(act);
+  return modalShell((g.emoji?g.emoji+" ":"")+reportTitle(g), body);
+}
 function NumPopModal(){ var d=state.numDraft; var body=h("div",null); body.appendChild(h("div",{style:{color:"var(--sub)",fontSize:"13px",marginBottom:"8px"}}, d.text+" · "+humanDate(d.key))); var inp=h("input",{class:"inp",type:"number",placeholder:"значение за этот день"}); inp.setAttribute("inputmode","numeric"); inp.value=d.val; inp.addEventListener("input",function(){ d.val=inp.value; }); body.appendChild(inp); var act=h("div",{class:"mActions"}); act.appendChild(h("div",{style:{flex:"1"}})); act.appendChild(h("button",{class:"ghostBtn", onClick:function(){ state.modal=null; state.numDraft=null; render(); }},"Отмена")); act.appendChild(h("button",{class:"primaryBtn", onClick:function(){ var n=parseInt(d.val,10); if(isNaN(n))n=0; state.modal=null; var gg=goalById(d.gid); state.numDraft=null; setDayCountValue(gg,d.sid,d.key,n); }},"Сохранить")); body.appendChild(act); return modalShell("Ввести значение", body); }
 function openDiaryFor(g,dk){ state.detailReturn="habitstat"; state.activeId=g.id; state.tab="notes"; state.view="detail"; render(); }
 function weekDays(key){ var w=weekBounds(key); var out=[], cur=w[0]; for(var i=0;i<7;i++){ out.push(cur); cur=shiftDay(cur,1); } return out; }
