@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Мои практики</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#7E3F42">
+<style>
+  :root{
+    --bg1:#F6EFE4; --bg2:#EFDFC9; --card:#FFFDF8; --line:#E7D9C4;
+    --text:#3E2B2C; --sub:#8A6F63; --accent:#7E3F42;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg1:#101423; --bg2:#0B0E1A; --card:#181D30; --line:#2A3050; --text:#EDE6D6; --sub:#8E96B5; --accent:#E8C48A; }
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; min-height:100%; }
+  body{
+    font-family:'Segoe UI',Roboto,system-ui,-apple-system,sans-serif;
+    background:linear-gradient(180deg,var(--bg1),var(--bg2));
+    color:var(--text);
+    min-height:100dvh;
+    display:flex; align-items:center; justify-content:center;
+    padding:calc(24px + env(safe-area-inset-top)) 22px calc(28px + env(safe-area-inset-bottom));
+  }
+  .wrap{ width:100%; max-width:420px; }
+  h1{ font-size:26px; font-weight:700; margin:0 0 4px; text-align:center; letter-spacing:.01em; }
+  .sub{ text-align:center; color:var(--sub); font-size:14px; margin:0 0 30px; }
+  .card{
+    display:flex; align-items:center; gap:16px;
+    background:var(--card); border:1px solid var(--line); border-radius:20px;
+    padding:20px 20px; margin-bottom:14px; text-decoration:none; color:var(--text);
+    box-shadow:0 4px 18px rgba(0,0,0,.05);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .card:active{ transform:scale(.98); }
+  @media (hover:hover){ .card:hover{ transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.09); } }
+  .emo{ font-size:32px; width:54px; height:54px; display:flex; align-items:center; justify-content:center; background:linear-gradient(160deg,var(--bg1),var(--bg2)); border-radius:16px; flex-shrink:0; }
+  .t{ flex:1; min-width:0; }
+  .name{ font-size:17.5px; font-weight:700; margin:0 0 3px; }
+  .desc{ font-size:13.5px; color:var(--sub); margin:0; line-height:1.35; }
+  .arrow{ color:var(--sub); font-size:20px; flex-shrink:0; }
+  .soon{ opacity:.45; pointer-events:none; }
+  .soonTag{ font-size:11.5px; color:var(--accent); border:1px solid var(--accent); border-radius:10px; padding:2px 8px; margin-left:6px; white-space:nowrap; }
+  .foot{ text-align:center; color:var(--sub); font-size:12px; margin-top:26px; opacity:.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Мои практики</h1>
+  <p class="sub">Выбери, с чем работаешь сейчас</p>
+
+  <a class="card" href="../celi/">
+    <div class="emo">🎯</div>
+    <div class="t">
+      <p class="name">Отчёт</p>
+      <p class="desc">Цели, этапы, отчёты за день и трекер привычек</p>
+    </div>
+    <div class="arrow">›</div>
+  </a>
+
+  <a class="card" href="../planer/" id="planerCard">
+    <div class="emo">📅</div>
+    <div class="t">
+      <p class="name">Планирование<span class="soonTag" id="planerTag" hidden>скоро</span></p>
+      <p class="desc">Планер недель: проекты и задачи по неделям</p>
+    </div>
+    <div class="arrow">›</div>
+  </a>
+
+  <a class="card" href="../">
+    <div class="emo">🌿</div>
+    <div class="t">
+      <p class="name">Наблюдение</p>
+      <p class="desc">Дневник зрелости: намерения и самонаблюдения</p>
+    </div>
+    <div class="arrow">›</div>
+  </a>
+
+  <p class="foot">Данные синхронизируются в облаке — входи в один аккаунт на всех устройствах</p>
+</div>
+<script>
+  if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("./sw.js"); }catch(e){} }
+  // если планер ещё не загружен в репозиторий — приглушаем карточку
+  fetch("../planer/", {method:"HEAD"}).then(function(r){
+    if(r.status===404){ var c=document.getElementById("planerCard"); c.classList.add("soon"); document.getElementById("planerTag").hidden=false; }
+  }).catch(function(){});
+</script>
+</body>
+</html>
